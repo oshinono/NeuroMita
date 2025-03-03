@@ -327,6 +327,7 @@
 		<Compile Include="Settings.cs" />
 		<Compile Include="PlayerControls\InputControl.cs" />
 		<Compile Include="Utils.cs" />
+		<Compile Include="WorldModded\Events\WardrobeFix.cs" />
 		<Compile Include="WorldModded\Other\ShaderReplacer.cs" />
 		<Compile Include="WorldModded\Events\EventsProxy.cs" />
 		<Compile Include="Mita\AudioControl.cs" />

@@ -806,7 +806,7 @@ class ChatGUI:
         )
         refresh_btn.pack(side=tk.LEFT, padx=5)
 
-        self.create_setting_widget(mic_frame, 'Распознавание', "MIC_ACTIVE", widget_type='checkbutton', default_checkbutton=True)
+        self.create_setting_widget(mic_frame, 'Распознавание', "MIC_ACTIVE", widget_type='checkbutton', default_checkbutton=False)
 
     def get_microphone_list(self):
         try:

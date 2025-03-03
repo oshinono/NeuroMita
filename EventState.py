@@ -100,7 +100,7 @@ if __name__ == "__main__":
     fsm.handle_event('stop')  # Running -> Idle
 
 
-class Activity():
+class Activity:
     """Недолгая активность"""
 
     def __init__(self):

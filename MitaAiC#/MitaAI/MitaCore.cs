@@ -185,7 +185,7 @@ namespace MitaAI
                 MitaAnimationModded.location34_Communication.mita = Mita;
                 MitaAnimationModded.location34_Communication.mitaCanWalk = true;
                 Location34_Communication.play = true;
-
+                Location34_Communication.mitaAnimator = MitaPersonObject.GetComponent<Animator_FunctionsOverride>();
                 Settings.MitaType.Value = character;
                 Settings.Save();
 

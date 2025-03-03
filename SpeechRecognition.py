@@ -4,7 +4,7 @@ from io import BytesIO
 import soundfile as sf
 import numpy as np
 import speech_recognition as sr
-import logging
+
 
 import asyncio
 

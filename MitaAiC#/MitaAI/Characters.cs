@@ -27,7 +27,7 @@ namespace MitaAI
 
         public static MitaCore.character ChooseCharacterToAsnwer()
         {
-            if ( Utils.getDistanceBetweenObjects(MitaCore.Instance.playerObject, MitaCore.Instance.cartridgeReader)<3f && MitaCore.Instance.getDistanceToPlayer()>6f){
+            if ( Utils.getDistanceBetweenObjects(MitaCore.Instance.playerObject, MitaCore.Instance.cartridgeReader)<3f && MitaCore.Instance.getDistanceToPlayer()>3f){
 
                 MelonLogger.Msg("Sent to cart");        
                 return get_cart();

@@ -493,6 +493,9 @@ class KindMita(Character):
         world_history = load_text_from_file("Prompts/Kind/Context/world.txt")
         Prompts.append(PromptPart(PromptType.FIXED_START, world_history, "world_history"))
 
+        SecretExposedText = load_text_from_file("Prompts/Cappy/Events/SecretExposed.txt")
+        Prompts.append(PromptPart(PromptType.FLOATING_SYSTEM, SecretExposedText, "SecretExposedText"))
+
         for prompt in Prompts:
             self.add_prompt_part(prompt)
 
@@ -538,20 +541,28 @@ class CappyMita(Character):
     def cappy_mita_prompts(self):
         Prompts = []
 
-        response_structure = load_text_from_file("Prompts/CrazyMitaPrompts/Structural/response_structure.txt")
+        response_structure = load_text_from_file("Prompts/Cappy/Structural/response_structure.txt")
         Prompts.append(PromptPart(PromptType.FIXED_START, response_structure))
 
-        common = load_text_from_file("Prompts/CrazyMitaPrompts/Main/common.txt")
+        common = load_text_from_file("Prompts/Cappy/Main/common.txt")
         Prompts.append(PromptPart(PromptType.FIXED_START, common, "common"))
 
-        examplesLong = load_text_from_file("Prompts/Cappy/cappy_examples.txt")
+        main = load_text_from_file("Prompts/Cappy/Main/main.txt")
+        Prompts.append(PromptPart(PromptType.FIXED_START, main, "main"))
+
+        player = load_text_from_file("Prompts/Cappy/Main/player.txt")
+        Prompts.append(PromptPart(PromptType.FIXED_START, player))
+        # Добавляем примеры длинных диалогов
+
+        examplesLong = load_text_from_file("Prompts/Cappy/Context/examplesLong.txt")
         Prompts.append(PromptPart(PromptType.FIXED_START, examplesLong, "examplesLong"))
 
-        mita_history = load_text_from_file("Prompts/Cappy/cappy_history.txt")
+        mita_history = load_text_from_file("Prompts/Cappy/Context/mita_history.txt")
         Prompts.append(PromptPart(PromptType.FIXED_START, mita_history, "mita_history"))
 
-        variableEffects = load_text_from_file("Prompts/CrazyMitaPrompts/Structural/VariablesEffects.txt")
+        variableEffects = load_text_from_file("Prompts/Cappy/Structural/VariablesEffects.txt")
         Prompts.append(PromptPart(PromptType.FIXED_START, variableEffects, "variableEffects"))
+
 
         for prompt in Prompts:
             self.add_prompt_part(prompt)

@@ -23,6 +23,7 @@ namespace MitaAI
         static MenuLocation MainMenuLocation;
         static GameObject FrameMenuObject;
 
+        static GameObject NeuroMitaButton;
 
         public static void init()
         {
@@ -56,7 +57,7 @@ namespace MitaAI
             Menu.transform.localPosition = new Vector3(250f, 355f, 0);
             Menu.transform.Find("Text").localPosition = new Vector3(-250, 15, 0);
 
-            GameObject NeuroMitaButton = GameObject.Instantiate(Menu.transform.Find("Button Continue").gameObject);
+            NeuroMitaButton = GameObject.Instantiate(Menu.transform.Find("Button Continue").gameObject);
             MainMenuLocation.objects.Add(NeuroMitaButton.GetComponent<RectTransform>());
             NeuroMitaButton.name = "NeuroMitaStartButton";
 
@@ -113,7 +114,7 @@ namespace MitaAI
             MelonLogger.Msg(1);
 
             StartMenuObject = GameObject.Instantiate(FrameMenuObject.transform.Find("Location MainOptions").gameObject, FrameMenuObject.transform);
-            StartMenuObject.active = true;
+            StartMenuObject.active = false;
             StartMenu = StartMenuObject.GetComponent<MenuLocation>();
             MelonLogger.Msg(2);
             try
@@ -130,6 +131,8 @@ namespace MitaAI
             try
             {
                 GameObject MitaCrazyButton = StartMenuObject.transform.Find("Button Full Clear").gameObject;
+                MitaCrazyButton.active = false;
+                MitaCrazyButton = GameObject.Instantiate(NeuroMitaButton, MitaCrazyButton.transform.position, MitaCrazyButton.transform.rotation, MitaCrazyButton.transform.parent);
                 MitaCrazyButton.name = "MitaCrazyButton";
                 MitaCrazyButton.active = true;
 
@@ -142,6 +145,8 @@ namespace MitaAI
             try
             {
                 GameObject MitaKindButton = StartMenuObject.transform.Find("Button Option Graphics").gameObject;
+                MitaKindButton.active = false;
+                MitaKindButton = GameObject.Instantiate(NeuroMitaButton, MitaKindButton.transform.position, MitaKindButton.transform.rotation, MitaKindButton.transform.parent);
                 MitaKindButton.name = "MitaKindButton";
                 MitaKindButton.active = true;
 
@@ -154,6 +159,8 @@ namespace MitaAI
             try
             {
                 GameObject MitaShorthairButton = StartMenuObject.transform.Find("Button Option Game").gameObject;
+                MitaShorthairButton.active = false;
+                MitaShorthairButton = GameObject.Instantiate(NeuroMitaButton, MitaShorthairButton.transform.position, MitaShorthairButton.transform.rotation, MitaShorthairButton.transform.parent);
                 MitaShorthairButton.name = "MitaShortButton";
                 MitaShorthairButton.active = true;
 
@@ -163,9 +170,24 @@ namespace MitaAI
             }
             catch (Exception e) { MelonLogger.Error(e); }
 
+            try
+            {
+                MelonLogger.Msg("Cappy");
+                GameObject MitaCappyButton = StartMenuObject.transform.Find("Button Volume").gameObject;
+                MitaCappyButton.active = false;
+                MitaCappyButton = GameObject.Instantiate(NeuroMitaButton, MitaCappyButton.transform.position, MitaCappyButton.transform.rotation, MitaCappyButton.transform.parent);
+                MitaCappyButton.name = "MitaCappyButton";
+                MitaCappyButton.active = true;
 
-            GameObject MitaShortButton = StartMenuObject.transform.Find("Button Volume").gameObject;
-            MitaShortButton.active = false;
+                MelonCoroutines.Start(changeName(MitaCappyButton.transform.Find("Text").gameObject, "Кепочка"));
+                MitaCappyButton.GetComponent<ButtonMouseClick>().eventClick = setupMenuEvent(MitaCappyButton, MitaCappyButton.name);
+
+            }
+            catch (Exception e) { MelonLogger.Error(e); }
+
+
+            //GameObject MitaShortButton = StartMenuObject.transform.Find("Button Volume").gameObject;
+            //MitaShortButton.active = false;
             MelonLogger.Msg(5);
             //GameObject MitaShortButton = StartMenuObject.transform.Find("Back").gameObject;
             //MitaShortButton.active = false;
@@ -203,6 +225,11 @@ namespace MitaAI
                     Settings.Save();
                     MainMenu.ButtonLoadScene(MitaCore.Instance.requiredSave);
                     break;
+                case "MitaCappyButton":
+                    Settings.MitaType.Value = MitaCore.character.Cappy;
+                    Settings.Save();
+                    MainMenu.ButtonLoadScene(MitaCore.Instance.requiredSave);
+                    break;
                 case "ButtonReturn":
                     StartMenu.Active(false);
                     MainMenuLocation.Active(true);
@@ -222,12 +249,12 @@ namespace MitaAI
             float time = 0f;
             while (NeuroMitaButtonText.GetComponent<UnityEngine.UI.Text>().font == original_font)
             {
-                if (time >= 10f)
+                if (time >= 30f)
                 {
                     break;
                 }
 
-                time += Time.deltaTime;
+                time += Time.unscaledDeltaTime;
                 yield return null;
             }
             NeuroMitaButtonText.GetComponent<UnityEngine.UI.Text>().text = text;
