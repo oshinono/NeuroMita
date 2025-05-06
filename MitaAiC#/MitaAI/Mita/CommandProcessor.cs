@@ -405,7 +405,8 @@ namespace MitaAI.Mita
                     MelonLogger.Msg($"Lighting color changed to RGB({r}, {g}, {b})");
                     break;
                 case "haircolor":
-                    MitaClothesModded.setMitaHairColor(new Color(r, g, b, 1f));
+                    var color = new Color(Math.Clamp(r,0,3), Math.Clamp(g,0,3), Math.Clamp(b,0,3), 1f);
+                    MitaClothesModded.setMitaHairColor(color);
                     MelonLogger.Msg($"HairColor changed to RGB({r}, {g}, {b})");
                     break;
 
