@@ -41,6 +41,11 @@ Translation (deepseek) [English readme](README_EN.md)
     Если нужна локальная озвучка, то там же:
     - Models
     - features.env
+    - include
+    - init_triton.bat
+    - init.py
+
+В будующих версиях постараемся завезти лаунчер.
 
 
 https://github.com/VinerX/NeuroMita/releases - тут релизы, то есть файлы которые нужны обычному игроку.
