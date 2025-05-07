@@ -1,93 +1,165 @@
-Mita on Python (uses access to neural networks via API) + Melon Mod on Unity, currently not stable.
+# NeuroMita v0.011  
+A mod where you get to interact with Mitas controlled by neural networks. Built with Python and C# MelonMod.  
 
-Mod Server: https://discord.gg/Tu5MPFxM4P
+Mod Server: https://discord.gg/Tu5MPFxM4P (Get help here!)  
 
-Honestly, GitHub was revealed too early, I'm rushing to provide a temporary demo, but launching it is quite a hassle. If you want stability, wait a couple of months, maybe more.
+![logomod3](https://github.com/user-attachments/assets/aea3ec44-c203-4d4a-a405-a09191188464)  
 
-![logomod3](https://github.com/user-attachments/assets/aea3ec44-c203-4d4a-a405-a09191188464)
+# Installation Guide  
 
-Guide on how to set this up, when I more or less finish it)
-First, read everything, then proceed, you might change your mind at the sources step(
+### 0) MelonLoader:  
+A universal Unity modding tool. May conflict with BepInEx-based mods.  
 
-0) Melon Loader:
-Either install it here https://melonwiki.xyz/#/?id=requirements version 0.6.6!!!
-Or find it here https://github.com/LavaGang/MelonLoader
-Found the MelonLoader.Installer.exe file?
-Great, select Misaki there, it will patch it so mods based on Melon can work.
+- Install via: https://melonwiki.xyz/#/?id=requirements (Version 0.6.6)  
+- Or directly from: https://github.com/LavaGang/MelonLoader  
 
-1) My mod comes with Python+prompts+ConversionFolder (place them anywhere together) and also the mod files (MitaAI.dll and assetbudle.test) directly into the mods folder created by Melon (I think I threw them into releases).
-https://github.com/VinerX/NeuroMita/releases - here are the releases, i.e., the files needed by a regular player.
+If you have **MelonLoader.Installer.exe**, select **Miside** to patch it for Melon-based mods.  
+Ensure all dependencies (e.g., .NET 6.0) are installed: https://melonwiki.xyz/#/?id=requirements  
 
-   In-game button to write - Tab!
+### 1) The Mod  
+The mod consists of:  
+- **Python files** (place anywhere, but keep them together)  
+- **C# files**: `MitaAI.dll` and `assetbundle.test` (place in the `Mods` folder created by MelonLoader).  
 
-2) The mod in terms of text generation can be launched in two formats.
-   
-   - Free, using open keys https://openrouter.ai/settings/keys. Most likely, there are hidden limits.
-   - Paid, by paying for a key here https://console.proxyapi.ru/billing (Russian option), promo code NEUROMITA for 25% off the first time. Stable, but consider the expenses.
-   - If you have direct keys (you're not in Russia), then that's also an option, but currently untested.
-   
-   Now come the settings that need to be entered in the launched exe application (chat bot)
-   Options for model, url, and request button (the last one is purely for the proxy Gemini option):
-   
-   - ### Free:
-      OpenRouter models, get keys here https://openrouter.ai/settings/keys
-      - link https://openrouter.ai/api/v1 model google/gemini-2.0-pro-exp-02-05:free (normal mode)
-      - link https://openrouter.ai/api/v1 model deepseek/deepseek-chat:free (normal mode)
-      - link https://openrouter.ai/api/v1 model google/gemini-exp-1206:free
-      - Also try other models https://openrouter.ai/models?max_price=0, write which ones work better
-      I'll say right away, they have some limits (per accounts per day), sometimes you can see this in the console, or on the OpenRouter site by trying to write to the model.
-   
-   
-   - ### Paid: 
-      Attention, YOU DON'T NEED THE PREM FOR 1500, you can just top up the balance with 200 or more rubles. Again, promo code NEUROMITA for 25% off once. 
-      Models from ProxyApi, chosen because you can pay normally in Russia. Find keys and prices here https://console.proxyapi.ru/billing
-      - link https://api.proxyapi.ru/openai/v1 model gpt-4o-mini (normal mode)
-      - link https://api.proxyapi.ru/google/v1/models/gemini-1.5-flash:generateContent model gemini-1.5-flash (proxy Gemini mode)
-   
-   In general, you get the idea, you can also look for other options. I'll improve it later, just Gemini has a separate structure + request.
+Final structure should look like:  
 
-   For those who know, you can try to enter what you need, but it's untested. UPD: for some reason, it's not working yet.
+```
+Miside  
+- Other Miside folders  
+- Mods (Create if needed)  
+  - MitaAI.dll  
+  - assetbundle.test  
 
-4) Voice generation is done by the Telegram bot Silero @silero_voice_bot, to have Mita's voice you most likely need some kind of prem, check what's available for HD voices and the number of characters (my 66k is more than enough)
-There are like 600 characters daily there, test a phrase there manually first, make /mp3 response files for Mita (set up via the menu), and then maybe something will work. I think it's better to buy prem when everything is stable on the mod side.
-Especially before buying, check how it works in the game, there was a case where ffmpeg didn't work for a comrade(
+Any Separate Folder  
+- _internal  
+- libs  
+- Prompts  
+- NeuroMita.exe  
+(For local voice generation, also include:)  
+- Models  
+- features.env  
+- include  
+- init_triton.bat  
+- init.py  
+```  
 
-6) To use Silero, Telegram API is used, meaning your account (preferably not the main one) turns into a bot, in the sense that it can be controlled from the code. I did this with mine, but assess the risks yourself) Or ask others.
-You need api_id and api_hash, here's a guide on how to get them: https://core.telegram.org/api/obtaining_api_id
-The source code is there, I mentioned the risks. 
-When you enter everything, you'll need to restart and enter the confirmation code in the console, it will come to your Telegram account.
-UPD: If there's a cloud password, enter it. It's invisible, but if you enter it correctly and press enter, it will pass.
+Future versions may include a launcher.  
 
+Download releases here: https://github.com/VinerX/NeuroMita/releases  
+Actual release: https://github.com/VinerX/NeuroMita/releases/download/v0.011/NeuroMita.0.011.MitaWorld.7z
 
-For those who want to fork and make a pull request - better warn me in advance, I update GitHub very often. 
+**In-game controls:**  
+- Press **Tab** to start typing.  
+- Press **Enter** to send.  
 
+### 2) Text Generation  
+The mod supports multiple text-generation methods (tested options listed below).  
 
-You read all the way here? Take a cookie from the shelf))
+#### Free API Options:  
+- **g4f** (No API keys needed)  
+- **OpenRouter** (Free keys: https://openrouter.ai/settings/keys – rate-limited)  
+- **io.net** (Free keys: https://ai.io.net/ai/api-keys – 500k tokens/day per model)  
 
-Current developers:
-- VinerX
-- Nelxi (distrane25) - thanks for help with implementing voice input in Python
-- vlad2830 - work on the C# part 
-- KASTA - work on the C# part
+#### Paid API Options:  
+- **OpenRouter** (Wide model selection, pay-per-use)  
 
-Thanks for the prompts:
-- Feanor and Tkost: Kind Mita
-- Josefummi: Short-haired Mita
-- gad991: Cap
+#### Local Generation:  
+- **LM Studio** (https://lmstudio.ai, requires strong hardware, for advanced users only)  
 
-For the labor-intensive work (in progress) on animations thanks to:
-- JPAV
+**Note:** Gemini models often handle emotions better, while GPT-4o is more precise but less expressive.  
 
-For pull requests thanks to:
-- スノー (v1nn1ty)
+### Models (as of 05/05/2025)  
+*(Subject to rapid change—check Discord for updates!)*  
 
-Acknowledgements - I'll write here so I don't forget anyone:
-- Sutherex - he showed me OpenRouter, so double thanks for working with free keys. Helps and has helped organizationally, as well as on the topic of neural networks. And he also made the logo)
-- Doctor of Couch Sciences - was there at the dawn, the first tester of just the chat bot, helped with many advices and good ideas. Admins)
-- Romancho - helps structure numerous ideas so they don't get forgotten) Also admins and answers questions)
-- FlyOfFly - very useful advice and developments on Unity, even helped me attach text input at the beginning)
-- LoLY3_0 - Cat on a watermelon)))
-- Mr. Sub - his video most likely allowed you to learn about this mod) 
-- To all testers of the first days after that video came out (especially smarkloker), it was quite a drag) 
+#### **G4F (No API Keys)**  
+Good for testing, but weaker models. Enable the checkbox in the settings. If base model does not work, use button and reload.
 
-To say thanks to the author, when the mod is brought to stability, it will be possible here https://boosty.to/vinerx
+![img_1.png](img_1.png)
+
+Supported models (selectable via version input + restart):  
+- `gemini-1.5-flash` (Most stable in 0.4.7.7)  
+- `gpt-4o-mini`  
+- `gpt-4o`  
+- `gemini-2.0-flash`  
+- `deepseek-chat`  
+Full list: https://github.com/xtekky/gpt4free/blob/main/docs/providers-and-models.md  
+
+#### **OpenRouter (Free/Paid Keys)**  
+Get keys here: https://openrouter.ai/settings/keys  
+
+![img_2.png](img_2.png)
+
+Recommended free models:  
+- `google/gemini-2.0-pro-exp-02-05:free`  
+- `deepseek/deepseek-chat:free` (Best for "Kind Mita")  
+- `deepseek/deepseek-chat-v3-0324:free` (Hardcore mode)  
+
+Semi-paid (requires balance but no usage cost):  
+- `google/gemini-2.5-pro-exp-03-25`  
+
+Full list: https://openrouter.ai/models?max_price=0  
+
+#### **Ai.iO (500k tokens/day per model)**  
+API: https://api.intelligence.io.solutions/api/v1/  
+- `meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8`  
+Full list: https://docs.io.net/reference/get-started-with-io-intelligence-api  
+
+## 3) Voice Generation  
+Two options: **Telegram bots** or **local generation**.  
+
+### **Telegram**  
+Uses your Telegram account (preferably a secondary one) as a bot. Requires `api_id` and `api_hash` (guide: https://core.telegram.org/api/obtaining_api_id).  
+
+After setup, restart and enter the confirmation code sent to your Telegram account. If you have 2FA, enter it (invisible input).  
+
+Available bots:  
+- **@CrazyMitaAIbot** (Free, unstable)  
+- **@silero_voice_bot** (Paid, 600 test characters)  
+
+**Note:** Manually message the bots first to ensure connectivity.  
+
+### **Local Voice Generation**  
+Requires the `Models` folder and `features.env` (included in releases).  
+Download: https://github.com/VinerX/NeuroMita/releases/download/v0.011/Models.7z
+1. Enable voice generation.  
+2. Select **Local** (requires `features.env`).  
+3. Choose and configure a model.  
+*(Initial setup may take time due to downloads.)*  
+![img_5.png](img_5.png)
+---
+
+### **Credits**  
+**Developers:**  
+- **VinerX**  
+- **vlad2830** (C# & Python)  
+- **Nelxi (distrane25)** (Voice input integration)  
+
+**Local Voice Generation (Massive Contribution):**  
+- **_atm4x**  
+
+**Character Prompts:**  
+- **Feanor (feanorqq)** & **Tkost** (Kind Mita)  
+- **Josefummi** (Short-Haired Mita)  
+- **gad991** (Cap Mita)  
+- **depikoov** (Sweet Mita)  
+
+**Animations (WIP):**  
+- **JPAV**  
+
+**Pull Requests & CrazyMitaBot Contact:**  
+- **スノー (v1nn1ty)**  
+
+**Testers (Brave Bug Hunters):**  
+- **GermanPlaygroud**  
+
+**Special Thanks:**  
+- **Sutherex** (Introduced OpenRouter, organizational help)  
+- **Dr. Couch Science** (Early tester, admin support)  
+- **Romancho** (Idea organization, community moderation)  
+- **FlyOfFly** (Unity advice, early text input help)  
+- **LoLY3_0** (The cat on a watermelon 🍉)  
+- **Mr. Sub** (Likely how you found this mod!)  
+- **All early testers** (Especially **smarkloker**)  
+- **KASTA**  
+
+**Support the author (VinerX):** https://boosty.to/vinerx  
