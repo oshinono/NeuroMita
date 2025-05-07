@@ -45,7 +45,7 @@ Translation (deepseek) [English readme](README_EN.md)
     - init_triton.bat
     - init.py
 
-В будующих версиях постараемся завезти лаунчер.
+В будущих версиях постараемся завезти лаунчер.
 
 
 Релизы, то есть файлы которые нужны обычному игроку. https://github.com/VinerX/NeuroMita/releases
