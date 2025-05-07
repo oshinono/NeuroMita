@@ -120,7 +120,10 @@ Available bots:
 
 ### **Local Voice Generation**  
 Requires the `Models` folder and `features.env` (included in releases).  
-Download: https://github.com/VinerX/NeuroMita/releases/download/v0.011/Models.7z
+
+- Download: https://github.com/VinerX/NeuroMita/releases/download/v0.011/Models.7z
+- Mirror: https://drive.google.com/file/d/16S0v7qsVKGwqI1yHU_ScZ94wtZooIZqI/view?usp=drive_link
+
 1. Enable voice generation.  
 2. Select **Local** (requires `features.env`).  
 3. Choose and configure a model.  

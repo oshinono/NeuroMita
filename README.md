@@ -157,7 +157,10 @@ Translation (deepseek) [English readme](README_EN.md)
 
 ### Локальная озвучка
 Требуется папка моделей и features.env, которые идут в релизе отдельной папкой. 
-Скачать: https://github.com/VinerX/NeuroMita/releases/download/v0.011/Models.7z
+
+- Скачать: https://github.com/VinerX/NeuroMita/releases/download/v0.011/Models.7z
+- Зеркало: https://drive.google.com/file/d/16S0v7qsVKGwqI1yHU_ScZ94wtZooIZqI/view?usp=drive_link
+
 Внимание, в процессе установок моделей будут закачиваться до файлы - это будет занимать время в первый раз.
 Также, каждый раз при смене моделей затрачивается время на инициализацию.
 
