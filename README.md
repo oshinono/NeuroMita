@@ -80,7 +80,7 @@ Translation (deepseek) [English readme](README_EN.md)
 ### G4F
 Вариант без ключей, хорош для тестрования, но модели слабее. Если вдруг с ним проблемы на модели по умолчанию, используйте кнопку закачки и перезапустесь.
      
-![img_1.png](img_1.png)
+![img_1.png](ReadmeFiles/img_1.png)
 
  Надо ставить галку на использование (оно будет использоваться вместо основных настроек). 
  Можно менять версии биоблиотеки используя ввод версии и кнопку (нужен перезапуск).
@@ -96,7 +96,7 @@ Translation (deepseek) [English readme](README_EN.md)
 
 Вариант с ключами, как бесплатными так и платными
 
-![img_2.png](img_2.png)
+![img_2.png](ReadmeFiles/img_2.png)
 
 
    Модели OpenRouter, ссылка ключи https://openrouter.ai/api/v1 тут получаем https://openrouter.ai/settings/keys
@@ -124,13 +124,13 @@ Translation (deepseek) [English readme](README_EN.md)
   Модели от ProxyApi, выбраны так как нормально можно оплатить в рф. Ключи и цены здесь: https://console.proxyapi.ru/billing
   
   Обратите внимание на вид ссылки  моделей Gemini. Эти модели - самые дешевые. 
-    ![img_3.png](img_3.png)
+    ![img_3.png](ReadmeFiles/img_3.png)
   - ссылка https://api.proxyapi.ru/google/v1/models/gemini-2.0-flash-lite:generateContent модель gemini-2.0-flash-lite
   - ссылка https://api.proxyapi.ru/google/v1/models/gemini-1.5-flash:generateContent модель gemini-1.5-flash
   
   Для GPT и DeepSeek ссылки имеют ввид по типу https://api.proxyapi.ru/openai/v1, галок не нужно:
 
-![img_4.png](img_4.png)
+![img_4.png](ReadmeFiles/img_4.png)
 
   - ссылка https://api.proxyapi.ru/openai/v1 модель gpt-4o-mini (дороже)
   - ссылка https://api.proxyapi.ru/deepseek модель deepseek-chat (осторожно, еще дороже)
@@ -164,7 +164,7 @@ Translation (deepseek) [English readme](README_EN.md)
 1) Включаем озвучку
 2) Выбираем Local, доступно если добавили features.env. Можно в целом загрузить автоматом при наличии файлика, но может быть медленно.
 3) Устаналиваем нужную модель, настраиваем.
-![img_5.png](img_5.png)
+![img_5.png](ReadmeFiles/img_5.png)
 
    
 Вы дочитали до сюда? Возьмите с полки пирожок))

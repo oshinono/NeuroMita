@@ -2,7 +2,7 @@
 
 Внимание, требуются c# unity разработчики (начинающие и выше), если что пишите сразу в лс дискорд vinerx!
 
-Translation (deepseek) [English readme](README_EN.md)
+Translation (deepseek) [English readme](../README_EN.md)
 
 Сервер Мода: https://discord.gg/Tu5MPFxM4P
 
