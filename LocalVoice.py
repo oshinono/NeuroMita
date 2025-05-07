@@ -16,6 +16,7 @@ from tkinter import ttk
 import tkinter.font as tkFont
 import time
 import ffmpeg
+from utils.GpuUtils import check_gpu_provider
 
 import hashlib
 from datetime import datetime
@@ -79,7 +80,7 @@ class LocalVoice:
         
         self.amd_test = os.environ.get('TEST_AS_AMD', '').upper() == 'TRUE'
 
-        self.provider = self.check_gpu_provider()
+        self.provider = check_gpu_provider()
 
         if self.provider in ["AMD"] or self.amd_test:
             logger.info("KMP_DUPLICATE_LIB_OK = TRUE")
@@ -192,6 +193,9 @@ class LocalVoice:
                         return False
                 if not self.is_edge_tts_rvc_installed():
                     if not self.download_edge_tts_rvc():
+                        return False
+                if not self.is_triton_installed():
+                    if not self.download_triton():
                         return False
                 self.current_model = "medium+low"
                 return True
@@ -1090,15 +1094,14 @@ class LocalVoice:
                 try:
                     with open(build_py_path, "r", encoding="utf-8") as f: source = f.read()
                     # Патч 1: Путь к tcc.exe
-                    new_cc_path = os.path.join(libs_path_abs, "triton", "runtime", "tcc", "tcc.exe").replace("\\", "\\\\")
-                    # Используем sysconfig, если он доступен, для большей надежности поиска старой строки
                     try:
                         old_line_tcc = f'cc = os.path.join(sysconfig.get_paths()["platlib"], "triton", "runtime", "tcc", "tcc.exe")'
                     except KeyError: # На случай, если platlib не определен
-                        old_line_tcc = 'os.path.join(sysconfig.get_paths()["platlib"], "triton", "runtime", "tcc", "tcc.exe")' # Примерная строка
+                        old_line_tcc = 'os.path.join(sysconfig.get_paths()["platlib"], "triton", "runtime", "tcc", "tcc.exe")' 
                         update_log("Предупреждение: Не удалось точно определить старую строку tcc в build.py, используется предположение.")
 
-                    new_line_tcc = f'cc = r"{new_cc_path}"'
+                    new_line_tcc = 'cc = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tcc", "tcc.exe")'
+                    
                     # Патч 2: Удаление -fPIC
                     old_line_fpic = 'cc_cmd = [cc, src, "-O3", "-shared", "-fPIC", "-Wno-psabi", "-o", out]'
                     new_line_fpic = 'cc_cmd = [cc, src, "-O3", "-shared", "-Wno-psabi", "-o", out]'
@@ -2481,23 +2484,6 @@ class LocalVoice:
         except ImportError:
             return False
     
-        
-    def check_gpu_provider(self):
-        # output = subprocess.check_output(
-        #     command, text=True, close_fds=True, stdin=subprocess.DEVNULL, stderr=subprocess.PIPE
-        # ).strip()
-        nvidia_output = subprocess.check_output("wmic path win32_VideoController get name", stdin=subprocess.DEVNULL, stderr=subprocess.PIPE).decode()
-        
-
-        if "NVIDIA" in nvidia_output:
-            return "NVIDIA" if not self.amd_test else "AMD"
-        
-        # Check for AMD GPU
-        if "AMD" in nvidia_output or "Radeon" in nvidia_output:
-            return "AMD"
-        
-        else:
-            return None
         
     #region Settings region:
     def load_model_settings(self, model_id):
