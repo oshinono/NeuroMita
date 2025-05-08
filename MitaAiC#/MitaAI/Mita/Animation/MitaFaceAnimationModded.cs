@@ -202,9 +202,18 @@ namespace MitaAI.Mita
             // 0 0,025 0
             // 90 0 0
 
+            GameObject heartNeon = null;
+            GameObject heartNeonL = null;
+            try
+            {
+               heartNeon  = RightEye.Find("HeartNeon").gameObject;
+               heartNeonL = LeftEye.Find("HeartNeonL").gameObject;
 
-            GameObject heartNeon = RightEye.Find("HeartNeon")?.gameObject;
-            GameObject heartNeonL = LeftEye.Find("HeartNeonL")?.gameObject;
+            }
+            catch (Exception)
+            {
+
+            }
 
             MelonLogger.Msg("setLoveEye 2");
 

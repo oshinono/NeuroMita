@@ -2530,9 +2530,9 @@ class ChatGUI:
             logger.debug("Зависимости Triton найдены (через import triton).")
 
         except ImportError as e:
-            logger.warning(f"Зависимости Triton не найдены! Ошибка импорта: {e}")
+            logger.warning(f"Зависимости Triton не найдены! Игнорируйте это предупреждение, если не используете \"Fish Speech+ / + RVC\" озвучку. Exception импорта: {e}")
         except Exception as e: # Ловим другие возможные ошибки при импорте
-            logger.error(f"Неожиданная ошибка при проверке Triton: {e}", exc_info=True)
+            logger.error(f"Неожиданная ошибка при проверке Triton. Игнорируйте это предупреждение, если не используете \"Fish Speech+ / + RVC\" озвучку. Exception: {e}", exc_info=True)
 
 
         # if not triton_found:

@@ -5,25 +5,28 @@ from pathlib import Path
 import sys
 from typing import List, Tuple
 
-# Конфигурация
+# Конфигурация - Если это юзает не VinerX, то меняй на свои пути! (не кидай в пул реквест)
 PROJECT_DIR = Path(r"F:\Games\OpenAI_API_TEST\OpenMita")
 STEAM_MODS_DIR = Path(r"F:\Games\steam2\steamapps\common\MiSide\Mods")
 OUTPUT_DIR = PROJECT_DIR / "dist" / "NeuroMita"
 VENV_PYINSTALLER = PROJECT_DIR / "venv" / "Scripts" / "pyinstaller.exe"
 SEVEN_ZIP_PATH = r"C:\Program Files\7-Zip\7z.exe"  # Путь к 7-Zip
 
-FINAL_ZIP_NAME = "NeuroMita "+"0."+"011"+"abc"+"Test"+".7z"
+FINAL_ZIP_NAME = "NeuroMita "+"0."+"011"+"MitaWorld"+"Test"+".7z"
 
 # Файлы для копирования
 FILES_TO_COPY = [
     (STEAM_MODS_DIR / "MitaAI.dll", OUTPUT_DIR),
     (STEAM_MODS_DIR / "assetbundle.test", OUTPUT_DIR),
+    (PROJECT_DIR / "init.py", OUTPUT_DIR),
+    (PROJECT_DIR / "init_triton.bat", OUTPUT_DIR),
     (PROJECT_DIR / "ffmpeg.exe", OUTPUT_DIR),
 ]
 
 # Папки для копирования (рекурсивно)
 DIRS_TO_COPY = [
     (PROJECT_DIR / "libs", OUTPUT_DIR / "libs"),
+    (PROJECT_DIR / "include", OUTPUT_DIR / "include"),
     (PROJECT_DIR / "Prompts", OUTPUT_DIR / "Prompts"),
 ]
 

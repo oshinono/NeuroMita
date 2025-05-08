@@ -5,42 +5,71 @@ import os
 import re # Импортируем модуль для регулярных выражений
 from Logger import logger
 
-
 def check_gpu_provider():
     """
     Проверяет вендора GPU (NVIDIA или AMD) в системе Windows.
+    
+    Пытается сначала использовать `wmic`, затем fallback на PowerShell.
+    
     Возвращает:
-        str: "NVIDIA", "AMD" или None, если не удалось определить или не Windows.
+        str: "NVIDIA", "AMD" или None, если не удалось определить.
     """
     if platform.system() != "Windows":
         logger.info("Предупреждение: Определение вендора GPU реализовано только для Windows.")
-        return None # Возвращаем None для не-Windows систем
+        return None
+
+    amd_test = os.environ.get('TEST_AS_AMD', '').upper() == 'TRUE'
+
+    def parse_output(output):
+        """Вспомогательная функция для анализа вывода"""
+        if "NVIDIA" in output:
+            return "NVIDIA" if not amd_test else "AMD"
+        elif "AMD" in output or "Radeon" in output:
+            return "AMD"
+        return None
 
     try:
+        # Первая попытка — через wmic
         output = subprocess.check_output(
             "wmic path win32_VideoController get name",
             shell=True, text=True, stdin=subprocess.DEVNULL, stderr=subprocess.PIPE
         ).strip()
 
-        amd_test = os.environ.get('TEST_AS_AMD', '').upper() == 'TRUE'
+        gpu_vendor = parse_output(output)
+        if gpu_vendor:
+            return gpu_vendor
 
-        if "NVIDIA" in output:
-            return "NVIDIA" if not amd_test else "AMD" 
-        elif "AMD" in output or "Radeon" in output:
-            return "AMD"
-        else:
-            logger.info(f"Не удалось определить вендора GPU из вывода WMI:\n{output}")
-            return None
+        logger.info(f"Не удалось определить вендора GPU из вывода WMIC:\n{output}")
+
     except FileNotFoundError:
-        logger.info("Ошибка: Команда 'wmic' не найдена. Убедитесь, что вы запускаете скрипт в Windows.")
-        return None
+        logger.info("Команда 'wmic' не найдена. Пробуем альтернативу через PowerShell...")
     except subprocess.CalledProcessError as e:
         logger.info(f"Ошибка при выполнении команды wmic: {e}")
         logger.info(f"Stderr: {e.stderr}")
-        return None
     except Exception as e:
-        logger.info(f"Неожиданная ошибка при определении GPU: {e}")
-        return None
+        logger.info(f"Неожиданная ошибка при выполнении wmic: {e}")
+
+    # Альтернатива через PowerShell
+    try:
+        command = [
+            "powershell",
+            "-Command",
+            "Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name"
+        ]
+        output = subprocess.check_output(
+            command, stdin=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True
+        ).strip()
+
+        gpu_vendor = parse_output(output)
+        if gpu_vendor:
+            return gpu_vendor
+
+        logger.info(f"Не удалось определить вендора GPU из вывода PowerShell:\n{output}")
+
+    except Exception as e:
+        logger.info(f"Ошибка при выполнении PowerShell-команды: {e}")
+
+    return None
 
 def get_cuda_devices():
     cuda_devices = []
