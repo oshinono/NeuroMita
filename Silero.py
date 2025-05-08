@@ -5,7 +5,9 @@ import time
 import random
 import asyncio
 #import emoji
+
 from telethon.tl.types import MessageMediaDocument, DocumentAttributeAudio
+from telethon.errors import SessionPasswordNeededError
 
 import tkinter as tk
 import platform
@@ -286,9 +288,56 @@ class TelegramBotHandler:
                 try:
                     await self.client.sign_in(phone=self.phone)
                     verification_code = await code_future
-                    await self.client.sign_in(phone=self.phone, code=verification_code)
+
+                    try:
+                        await self.client.sign_in(phone=self.phone, code=verification_code)
+                    except SessionPasswordNeededError:
+                        # Если требуется пароль двухфакторной аутентификации
+                        password_window = tk.Toplevel()
+                        password_window.title("Двухфакторная аутентификация")
+                        password_window.geometry("300x150")
+                        password_window.resizable(False, False)
+
+                        frame = tk.Frame(password_window)
+                        frame.place(relx=0.5, rely=0.5, anchor="center")
+
+                        password_var = tk.StringVar()
+
+                        password_entry = tk.Entry(
+                            frame, textvariable=password_var, width=20, justify="center", show="*"
+                        )
+                        password_entry.pack(pady=10)
+                        password_entry.focus()
+
+                        password_future = asyncio.Future()
+
+                        def submit_password():
+                            if password_var.get().strip():
+                                password_future.set_result(password_var.get().strip())
+                                password_window.destroy()
+                            else:
+                                tk.messagebox.showerror("Ошибка", "Введите пароль")
+
+                        def on_enter_password(event):
+                            submit_password()
+
+                        password_entry.bind("<Return>", on_enter_password)
+
+                        submit_button = tk.Button(
+                            frame,
+                            text="Подтвердить",
+                            command=submit_password,
+                            width=15,
+                            relief="flat",
+                        )
+                        submit_button.pack(pady=15)
+
+                        # Получаем пароль от пользователя
+                        password = await password_future
+                        await self.client.sign_in(password=password)
+
                 except Exception as e:
-                    logger.info(f"Ошибка при вводе кода: {e}")
+                    logger.info(f"Ошибка при авторизации: {e}")
                     raise
 
             await self.client.send_message(self.tg_bot, "/start")

@@ -521,7 +521,11 @@ class ChatGUI:
                     delta = -1 if event.delta > 0 else 1
             else:
                 return
-
+            #Это проверка на достигнутый конец прокрутки
+            current_pos = right_canvas.yview()
+            if (delta < 0 and current_pos[0] <= 0) or (delta > 0 and current_pos[1] >= 1):
+                return
+            
             right_canvas.yview_scroll(delta, "units")
 
         # Привязываем события прокрутки для разных платформ
