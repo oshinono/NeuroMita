@@ -210,5 +210,14 @@ Translation (deepseek) [English readme](README_EN.md)
 - KASTA 
 
 Поддержать автора (VinerX), можно будет тут https://boosty.to/vinerx
- 
+
+Криптой:
+
+  - Ethereum (ETH) 0xd1b91ff711f1315053f3C89EB9256eABF3Ee0377
+  - USDT (ETH) 0xd1b91ff711f1315053f3C89EB9256eABF3Ee0377
+  - USDT (TRON) THi7QcfNyEmnaRzzoCpM6wyhhxvPBb5mJg
+  - Tron (TRX) THi7QcfNyEmnaRzzoCpM6wyhhxvPBb5mJg
+  - Bitcoin (BTC) bc1q3df4zlv40dhkhuq2asmh4we9jvqlnemey5u4cw
+
+Пишите в лс дискорд, если удобней каким-то другим типом криптовалюты.
 

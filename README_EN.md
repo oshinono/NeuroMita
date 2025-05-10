@@ -166,3 +166,13 @@ Requires the `Models` folder and `features.env` (included in releases).
 - **KASTA**  
 
 **Support the author (VinerX):** https://boosty.to/vinerx  
+
+CryptoCurrency:
+
+  - Ethereum (ETH) 0xd1b91ff711f1315053f3C89EB9256eABF3Ee0377
+  - USDT (ETH) 0xd1b91ff711f1315053f3C89EB9256eABF3Ee0377
+  - USDT (TRON) THi7QcfNyEmnaRzzoCpM6wyhhxvPBb5mJg
+  - Tron (TRX) THi7QcfNyEmnaRzzoCpM6wyhhxvPBb5mJg
+  - Bitcoin (BTC) bc1q3df4zlv40dhkhuq2asmh4we9jvqlnemey5u4cw
+
+Write me in discord, if need address for other type.
