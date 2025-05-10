@@ -212,8 +212,8 @@ namespace MitaAI
 
                 if (mT_Location4Fight.winG >= 4 || mT_Location4Fight.loseG >= 4)
                 {
-                    if (mT_Location4Fight.winG == 4) CharacterMessages.sendSystemMessage($"Player won game of Milk fight");
-                    else CharacterMessages.sendSystemMessage("You won game of Milk fight");
+                    if (mT_Location4Fight.winG == 4) CharacterMessages.sendSystemMessage("You won game of Milk fight");
+                    else CharacterMessages.sendSystemMessage($"Player won game of Milk fight"); 
 
                     yield return new WaitForSeconds(5f);
 
@@ -226,8 +226,8 @@ namespace MitaAI
                 }
 
 
-                if (mT_Location4Fight.winG == scorePlayer) CharacterMessages.sendSystemMessage($"Player won round in the game of Milk fight.");
-                else CharacterMessages.sendSystemMessage($"You won round in the game of Milk fight.");
+                if (mT_Location4Fight.winG == scorePlayer) CharacterMessages.sendSystemMessage($"You won round in the game of Milk fight.");
+                else CharacterMessages.sendSystemMessage($"Player won round in the game of Milk fight."); 
 
                 scorePlayer = mT_Location4Fight.winG;
                 scoreMita = mT_Location4Fight.loseG;
