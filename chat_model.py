@@ -702,7 +702,7 @@ class ChatModel:
         model_name = model_name.lower()
         if 'gpt' in model_name:
             return 'openai'
-        elif 'gemini' in model_name or "gemma" in model_name:
+        elif bool(self.gui.settings.get("GEMINI_CASE", False)):
             return 'gemini'
         elif 'claude' in model_name:
             return 'anthropic'
