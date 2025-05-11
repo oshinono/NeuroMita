@@ -495,8 +495,8 @@ class ChatModel:
             logger.info(f"API URL: {self.api_url}")
             logger.info(f"API Model: {self.api_model}")
             logger.info(f"Make Request: {self.makeRequest}")
-            logger.info(self.gui.settings.get("NM_API_REQ", False))
-            logger.info(self.gui.settings.get("GEMINI_CASE", False))
+            logger.info(f"NM_API_REQ {self.gui.settings.get("NM_API_REQ", False)}")
+            logger.info(f"GEMINI_CASE {self.gui.settings.get("GEMINI_CASE", False)}")
 
     def _format_messages_for_gemini(self, combined_messages):
         #TODO Надо кароче первые сообщения сделать системными
@@ -639,7 +639,8 @@ class ChatModel:
 
         data = {
             "contents": [
-                {"role": msg["role"], "parts": [{"text": msg["content"]}]} for msg in combined_messages
+                {"role": "model" if msg["role"] == "assistant" else msg["role"], "parts": [{"text": msg["content"]}]}
+                for msg in combined_messages
             ],
             "generationConfig": params
         }
