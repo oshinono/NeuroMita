@@ -11,9 +11,9 @@ import re
 
 from Logger import logger
 from characters import *
-from character import GameMaster,SpaceCartridge,DivanCartridge
+from character import GameMaster, SpaceCartridge, DivanCartridge
 from utils.PipInstaller import PipInstaller
-import importlib 
+import importlib
 from utils import *
 
 
@@ -27,12 +27,12 @@ class ChatModel:
 
         self.gui = gui
 
-        self.pip_installer = pip_installer # Сохраняем установщик
+        self.pip_installer = pip_installer  # Сохраняем установщик
 
         # Инициализация переменных g4f
         self.g4fClient = None
         self.g4f_available = False
-        self._initialize_g4f() 
+        self._initialize_g4f()
 
         # try:
         #     from g4f.client import Client as g4fClient
@@ -67,7 +67,11 @@ class ChatModel:
             logger.info("Тиктокен не сработал( Ну и пофиг, на билдах он никогда и не работал")
             self.hasTokenizer = False
 
-        self.max_response_tokens = 3200
+        # Инициализация переменных
+        self.max_response_tokens = int(
+            self.gui.settings.get("MODEL_MAX_RESPONSE_TOKENS", 3200))  # Получаем из настроек, если есть, иначе дефолт
+        self.temperature = float(self.gui.settings.get("MODEL_TEMPERATURE", 0.5))
+        self.presence_penalty = float(self.gui.settings.get("MODEL_PRESENCE_PENALTY", 0.0))  #
 
         """ Очень спорно уже """
         self.cost_input_per_1000 = 0.0432
@@ -137,7 +141,7 @@ class ChatModel:
                         importlib.invalidate_caches()
                         logger.info("Кэш импорта очищен.")
                     except Exception as e_invalidate:
-                         logger.error(f"Ошибка при очистке кэша импорта: {e_invalidate}")
+                        logger.error(f"Ошибка при очистке кэша импорта: {e_invalidate}")
 
                     logger.info("Повторная попытка импорта и инициализации...")
                     try:
@@ -156,9 +160,9 @@ class ChatModel:
                         self.g4fClient = None
                         self.g4f_available = False
                     except Exception as e_import_after:
-                         logger.error(f"Непредвиденная ошибка при повторном импорте/инициализации g4f: {e_import_after}")
-                         self.g4fClient = None
-                         self.g4f_available = False
+                        logger.error(f"Непредвиденная ошибка при повторном импорте/инициализации g4f: {e_import_after}")
+                        self.g4fClient = None
+                        self.g4f_available = False
                 else:
                     logger.error("Первоначальная установка g4f не удалась (ошибка pip).")
                     self.g4fClient = None
@@ -168,62 +172,62 @@ class ChatModel:
                 self.g4fClient = None
                 self.g4f_available = False
         except Exception as e_initial:
-             logger.error(f"Непредвиденная ошибка при первичной инициализации g4f: {e_initial}")
-             self.g4fClient = None
-             self.g4f_available = False
+            logger.error(f"Непредвиденная ошибка при первичной инициализации g4f: {e_initial}")
+            self.g4fClient = None
+            self.g4f_available = False
 
     def init_characters(self):
         """
         Инициализирует возможных персонажей
         """
-        self.crazy_mita_character = CrazyMita("Crazy", 
-                                              "/speaker mita", 
+        self.crazy_mita_character = CrazyMita("Crazy",
+                                              "/speaker mita",
                                               short_name="CrazyMita",
                                               miku_tts_name="/set_person CrazyMita",
                                               silero_turn_off_video=True)
-        self.cappy_mita_character = CappyMita("Cappy", 
-                                              "/speaker cap", 
+        self.cappy_mita_character = CappyMita("Cappy",
+                                              "/speaker cap",
                                               short_name="CappieMita",
                                               miku_tts_name="/set_person CapMita",
                                               silero_turn_off_video=True)
-        self.cart_space = SpaceCartridge("Cart_portal", 
-                                         "/speaker  wheatley", 
-                                         short_name="Player", 
+        self.cart_space = SpaceCartridge("Cart_portal",
+                                         "/speaker  wheatley",
+                                         short_name="Player",
                                          miku_tts_name="/set_person Player",
                                          silero_turn_off_video=True)
-        self.kind_mita_character = KindMita("Kind", 
-                                            "/speaker kind", 
+        self.kind_mita_character = KindMita("Kind",
+                                            "/speaker kind",
                                             short_name="MitaKind",
                                             miku_tts_name="/set_person KindMita",
                                             silero_turn_off_video=True)
-        self.shorthair_mita_character = ShortHairMita("ShortHair", 
-                                                      "/speaker  shorthair", 
+        self.shorthair_mita_character = ShortHairMita("ShortHair",
+                                                      "/speaker  shorthair",
                                                       short_name="ShorthairMita",
                                                       miku_tts_name="/set_person ShortHairMita",
                                                       silero_turn_off_video=True)
-        self.mila_character = MilaMita("Mila", 
-                                       "/speaker mila", 
+        self.mila_character = MilaMita("Mila",
+                                       "/speaker mila",
                                        short_name="Mila",
                                        miku_tts_name="/set_person MilaMita",
                                        silero_turn_off_video=True)
-        self.sleepy_character = SleepyMita("Sleepy", 
+        self.sleepy_character = SleepyMita("Sleepy",
                                            "/speaker dream",
                                            short_name="SleepyMita",
                                            miku_tts_name="/set_person SleepyMita",
                                            silero_turn_off_video=True)
-        self.cart_divan = DivanCartridge("Cart_divan", 
-                                         "/speaker engineer", 
+        self.cart_divan = DivanCartridge("Cart_divan",
+                                         "/speaker engineer",
                                          short_name="Player",
                                          miku_tts_name="/set_person Player",
                                          silero_turn_off_video=True)
-        self.creepy_character = CreepyMita("Creepy", 
-                                           "/speaker ghost", 
-                                           short_name="GhostMita", # TODO: вместо крипи будет гост
+        self.creepy_character = CreepyMita("Creepy",
+                                           "/speaker ghost",
+                                           short_name="GhostMita",  # TODO: вместо крипи будет гост
                                            miku_tts_name="/set_person GhostMita",
                                            silero_turn_off_video=True)  #Спикер на рандом поставил
-        self.GameMaster = GameMaster("GameMaster", 
-                                     "/speaker dryad", 
-                                     short_name="PhoneMita", # TODO: чето подобрать
+        self.GameMaster = GameMaster("GameMaster",
+                                     "/speaker dryad",
+                                     short_name="PhoneMita",  # TODO: чето подобрать
                                      miku_tts_name="/set_person PhoneMita",
                                      silero_turn_off_video=True)  # Спикер на рандом поставил
 
@@ -532,23 +536,15 @@ class ChatModel:
 
                 self.gpt4free_model = self.gui.settings.get("gpt4free_model")
                 self.change_last_message_to_user_for_gemini(self.gpt4free_model, combined_messages)
-                completion = self.g4fClient.chat.completions.create(
-                    model= self.gpt4free_model,
-                    messages=combined_messages,
-                    max_tokens=self.max_response_tokens,
-                    temperature=0.5,
-                    web_search=False
-                )
+
+                final_params = self.get_final_params(self.gpt4free_model, combined_messages)
+                completion = self.g4fClient.chat.completions.create(**final_params)
             else:
                 self.change_last_message_to_user_for_gemini(self.api_model, combined_messages)
-                completion = self.client.chat.completions.create(
-                    model=self.api_model,
-                    messages=combined_messages,
-                    max_tokens=self.max_response_tokens,
-                    #presence_penalty=1.5,
-                    temperature=0.5,
-                    #timeout=int(self.gui.settings.get("TEXT_WAIT_TIME"))
-                )
+
+                # Сообщения фильтруются по структуре отдельно, не как простой параметр}
+                final_params = self.get_final_params(self.api_model, combined_messages)
+                completion = self.client.chat.completions.create(**final_params)
             logger.info(f"after completion{completion}")
 
             if completion:
@@ -639,15 +635,13 @@ class ChatModel:
         return response
 
     def generate_request_gemini(self, combined_messages):
+        params = self.get_params()
+
         data = {
             "contents": [
                 {"role": msg["role"], "parts": [{"text": msg["content"]}]} for msg in combined_messages
             ],
-            "generationConfig": {
-                "maxOutputTokens": self.max_response_tokens,
-                "temperature": 1,
-                "presencePenalty": 1.5
-            }
+            "generationConfig": params
         }
 
         headers = {
@@ -663,22 +657,25 @@ class ChatModel:
             response_data = response.json()
             generated_text = response_data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get(
                 "text", "")
-            logger.info("Gemini Flash: \n" + generated_text)
+            logger.info("Answer: \n" + generated_text)
             return generated_text
         else:
             logger.error(f"Ошибка: {response.status_code}, {response.text}")
             return None
 
     def generate_request_common(self, combined_messages):
+
+
         data = {
-            "model": self.gui.settings.get("NM_API_MODEL"),  # Добавляем указание модели
+            "model": self.gui.settings.get("NM_API_MODEL"),
             "messages": [
                 {"role": msg["role"], "content": msg["content"]} for msg in combined_messages
-            ],
-            "max_tokens": self.max_response_tokens,  # Изменяем имя параметра
-            "temperature": 1,
-            "presence_penalty": 1.5  # Изменяем формат имени параметра
+            ]
         }
+
+        # Объединяем params в data
+        params = self.get_params()
+        data.update(params)
 
         headers = {
             "Content-Type": "application/json",
@@ -698,6 +695,77 @@ class ChatModel:
         else:
             logger.error(f"Ошибка: {response.status_code}, {response.text}")
             return None
+
+    # Предполагаем, что у вас есть способ определить провайдера по имени модели
+    def _get_provider_key(self, model_name):
+        model_name = model_name.lower()
+        if 'gpt' in model_name:
+            return 'openai'
+        elif 'gemini' or "gemma" in model_name:
+            return 'gemini'
+        elif 'claude' in model_name:
+            return 'anthropic'
+        elif 'deepseek' in model_name:
+            return 'deepseek'
+        # Добавьте проверки для других провайдеров
+        else:
+            # Действие по умолчанию, если провайдер неизвестен (вызвать ошибку или использовать маппинг по умолчанию)
+            print(f"Warning: Unknown model provider for model '{model_name}'. Defaulting to 'openai' rules.")
+            return 'openai'  # Или можно вернуть None, чтобы добавить только общие параметры
+
+    def get_params(self, model=None):
+        current_model = model if model is not None else self.api_model
+        provider_key = self._get_provider_key(current_model)
+
+        params = {}
+
+        # Температура часто называется одинаково
+        if self.temperature is not None:
+            params['temperature'] = self.temperature
+
+        # Макс. токены - названия могут различаться
+        if self.max_response_tokens is not None:
+            if provider_key == 'openai' or provider_key == 'deepseek' or provider_key == 'anthropic':
+                params['max_tokens'] = self.max_response_tokens
+            elif provider_key == 'gemini':
+                params['maxOutputTokens'] = self.max_response_tokens
+            # Добавьте другие провайдеры
+
+        # Штраф за присутствие - названия могут различаться, и параметр может отсутствовать у некоторых провайдеров
+        if self.presence_penalty is not None:
+            if provider_key == 'openai' or provider_key == 'deepseek':
+                params['presence_penalty'] = self.presence_penalty
+            elif provider_key == 'gemini':
+                params['presencePenalty'] = self.presence_penalty
+            # Anthropic, например, не имеет прямого аналога этого параметра в том же виде.
+            # Поэтому мы просто не добавляем его для Anthropic.
+
+        # Добавьте другие параметры аналогично
+        # if self.some_other_param is not None:
+        #     if provider_key == 'openai': params['openai_name'] = self.some_other_param
+        #     elif provider_key == 'gemini': params['gemini_name'] = self.some_other_param
+        #     # и т.д.
+
+        params = self.remove_unsupported_params(current_model,params)
+
+        return params
+
+    def get_final_params(self, model, messages):
+        """Модель, сообщения и параметры"""
+        final_params = {
+            "model": model,
+            "messages": messages,
+        }
+        final_params.update(self.get_params(model))
+
+        return final_params
+
+    def remove_unsupported_params(self,model,params):
+        """Тут удаляем все лишние параметры"""
+        if model == "gemini-2.5-pro-exp-03-25":
+            params.pop("presencePenalty")
+        return params
+
 
     def process_commands(self, response, messages):
         """
@@ -803,7 +871,6 @@ class ChatModel:
         }
         self.infos.append(system_info)
         #self.current_character.add_message_to_history(system_info)
-
 
     #region TokensCounting
     def calculate_cost(self, user_input):
