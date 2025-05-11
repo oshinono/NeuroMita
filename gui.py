@@ -141,7 +141,7 @@ class ChatGUI:
 
         try:
             self.pip_installer = PipInstaller(
-                script_path="libs\python\python.exe",
+                script_path=r"\libs\python\python.exe",
                 libs_path="Lib",
                 update_log=logger.info
             )
@@ -1200,93 +1200,62 @@ class ChatGUI:
              'key': 'VOICE_WAIT_TIME', 'type': 'entry', 'default': 40,
              'tooltip': _('время ожидания озвучки', 'voice generation waiting time')},
 
+            {'label': _('Настройки генерации текста', 'Text Generation Settings'), 'type': 'text'},
+            {'label': _('Макс. токенов в ответе', 'Max response tokens'), 'key': 'MODEL_MAX_RESPONSE_TOKENS',
+             'type': 'entry', 'default': 2500, 'validation': self.validate_positive_integer,
+             'tooltip': _('Максимальное количество токенов в ответе модели',
+                          'Maximum number of tokens in the model response')},
+            {'label': _('Температура', 'Temperature'), 'key': 'MODEL_TEMPERATURE',
+             'type': 'entry', 'default': 0.5, 'validation': self.validate_float_0_to_2,
+             'tooltip': _('Креативность ответа (0.0 = строго, 2.0 = очень творчески)',
+                          'Creativity of response (0.0 = strict, 2.0 = very creative)')},
+
+            {'label': _('Штраф присутствия', 'Use Presence penalty'),
+             'key': 'USE_MODEL_PRESENCE_PENALTY',
+             'type': 'checkbutton',
+             'default_checkbutton': True,
+             'tooltip': _('Использовать параметр Штраф присутствия', 'Use the Presence penalty parameter')},
+            {'label': _('Штраф присутствия', 'Presence penalty'), 'key': 'MODEL_PRESENCE_PENALTY',
+             'type': 'entry', 'default': 0.0, 'validation': self.validate_float_minus2_to_2,
+             'tooltip': _('Штраф за использование новых токенов (-2.0 = поощрять новые, 2.0 = сильно штрафовать)',
+                          'Penalty for using new tokens (-2.0 = encourage new, 2.0 = strongly penalize)')},
+
         ]
 
         self.create_settings_section(parent,
                                      _("Общие настройки моделей", "General settings for models"),
                                      general_config)
-
+    # region Validation
     def validate_number(self, new_value):
         if not new_value.isdigit():  # Проверяем, что это число
             return False
         return 0 <= int(new_value) <= 60  # Проверяем, что в пределах диапазона
 
-    def save_api_settings(self):
-        """Собирает данные из полей ввода и сохраняет только непустые значения, не перезаписывая существующие."""
+    # Добавьте функции валидации в ChatGUI
+    def validate_positive_integer(self, new_value):
+        if new_value == "": return True  # Разрешаем пустое поле временно
         try:
-            settings = {}  # По умолчанию пустые настройки
-            # Загружаем текущие настройки, если файл существует
-            if os.path.exists(self.config_path):
-                try:
-                    with open(self.config_path, "rb") as f:
-                        encoded = f.read()
-                    try:
-                        decoded = base64.b64decode(encoded)
-                    except binascii.Error:
-                        logger.info("Ошибка: Файл настроек поврежден (невалидный Base64).")
-                        decoded = "{}".encode("utf-8")  # Пустой JSON в виде строки
+            value = int(new_value)
+            return value > 0
+        except ValueError:
+            return False
 
-                    try:
-                        settings = json.loads(decoded.decode("utf-8"))
-                    except json.JSONDecodeError:
-                        logger.info("Ошибка: Файл настроек содержит некорректный JSON.")
-                        settings = {}
+    def validate_float_0_to_2(self, new_value):
+        if new_value == "": return True
+        try:
+            value = float(new_value)
+            return 0.0 <= value <= 2.0
+        except ValueError:
+            return False
 
-                except (OSError, IOError) as e:
-                    decoded = base64.b64decode(encoded)
-                    settings = json.loads(decoded.decode("utf-8"))
-
-            # Обновляем настройки новыми значениями, если они не пустые
-            if api_key := self.api_key_entry.get().strip():
-                logger.info("Сохранение апи ключа")
-                settings["NM_API_KEY"] = api_key
-            if api_key_res := self.api_key_res_entry.get().strip():
-                logger.info("Сохранение резервного апи ключа")
-                settings["NM_API_KEY_RES"] = api_key_res
-            if api_url := self.api_url_entry.get().strip():
-                logger.info("Сохранение апи ссылки")
-                settings["NM_API_URL"] = api_url
-            else:
-                logger.info("Сохранение ссылку по умолчанию, тк она пуста")
-                settings["NM_API_URL"] = "https://openrouter.ai/api/v1"
-            if api_model := self.api_model_entry.get().strip():
-                logger.info("Сохранение апи модели")
-                settings["NM_API_MODEL"] = api_model
-            else:
-                logger.info("Сохранение модель по умолчанию, тк настройка пуста")
-                settings["NM_API_MODEL"] = "google/gemini-2.0-pro-exp-02-05:free"
-
-            if api_id := self.api_id_entry.get().strip():
-                logger.info("Сохранение тг айди")
-                settings["NM_TELEGRAM_API_ID"] = api_id
-            if api_hash := self.api_hash_entry.get().strip():
-                logger.info("Сохранение тг хеш")
-                settings["NM_TELEGRAM_API_HASH"] = api_hash
-            if phone := self.phone_entry.get().strip():
-                logger.info("Сохранение тг телефона")
-                settings["NM_TELEGRAM_PHONE"] = phone
-
-            # Булево значение сохраняем всегда
-            settings["NM_API_REQ"] = self.makeRequest
-
-            # Сериализация и кодирование
-            json_data = json.dumps(settings, ensure_ascii=False)
-            encoded = base64.b64encode(json_data.encode("utf-8"))
-
-            # Сохраняем в файл
-            with open(self.config_path, "wb") as f:
-                f.write(encoded)
-            logger.info("Настройки успешно сохранены в файл")
-
-        except Exception as e:
-            logger.info(f"Ошибка сохранения: {e}")
-
-        # Сразу же их загружаем
-        self.load_api_settings(update_model=True)
-
-        if not self.silero_connected.get():
-            logger.info("Попытка запустить силеро заново")
-            self.start_silero_async()
+    def validate_float_minus2_to_2(self, new_value):
+        if new_value == "": return True
+        try:
+            value = float(new_value)
+            return -2.0 <= value <= 2.0
+        except ValueError:
+            return False
+    # endrigion
 
     def load_api_settings(self, update_model):
         """Загружает настройки из файла"""
@@ -1669,6 +1638,22 @@ class ChatGUI:
             self.model.makeRequest = bool(value)
         elif key == "gpt4free_model":
             self.model.gpt4free_model = value.strip()
+        elif key == "MODEL_MAX_RESPONSE_TOKENS":
+            try:
+                self.model.max_response_tokens = int(value)
+            except ValueError:
+                pass  # Игнорировать, если не число
+        elif key == "MODEL_TEMPERATURE":
+            try:
+                self.model.temperature = float(value)
+            except ValueError:
+                pass  # Игнорировать, если не число
+        elif key == "MODEL_PRESENCE_PENALTY":
+            try:
+                self.model.presence_penalty = float(value)
+            except ValueError:
+                pass  # Игнорировать, если не число
+
 
         elif key == "MODEL_MESSAGE_LIMIT":
             self.model.memory_limit = int(value)
