@@ -1209,6 +1209,12 @@ class ChatGUI:
              'type': 'entry', 'default': 0.5, 'validation': self.validate_float_0_to_2,
              'tooltip': _('Креативность ответа (0.0 = строго, 2.0 = очень творчески)',
                           'Creativity of response (0.0 = strict, 2.0 = very creative)')},
+
+            {'label': _('Штраф присутствия', 'Use Presence penalty'),
+             'key': 'USE_MODEL_PRESENCE_PENALTY',
+             'type': 'checkbutton',
+             'default_checkbutton': True,
+             'tooltip': _('Использовать параметр Штраф присутствия', 'Use the Presence penalty parameter')},
             {'label': _('Штраф присутствия', 'Presence penalty'), 'key': 'MODEL_PRESENCE_PENALTY',
              'type': 'entry', 'default': 0.0, 'validation': self.validate_float_minus2_to_2,
              'tooltip': _('Штраф за использование новых токенов (-2.0 = поощрять новые, 2.0 = сильно штрафовать)',

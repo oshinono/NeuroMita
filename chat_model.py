@@ -732,7 +732,7 @@ class ChatModel:
             # Добавьте другие провайдеры
 
         # Штраф за присутствие - названия могут различаться, и параметр может отсутствовать у некоторых провайдеров
-        if self.presence_penalty is not None:
+        if self.presence_penalty is not None and bool(self.gui.settings.get("USE_MODEL_PRESENCE_PENALTY")):
             if provider_key == 'openai' or provider_key == 'deepseek':
                 params['presence_penalty'] = self.presence_penalty
             elif provider_key == 'gemini':
@@ -762,7 +762,7 @@ class ChatModel:
 
     def remove_unsupported_params(self,model,params):
         """Тут удаляем все лишние параметры"""
-        if model == "gemini-2.5-pro-exp-03-25":
+        if model in ("gemini-2.5-pro-exp-03-25","gemini-2.5-flash-preview-04-17"):
             params.pop("presencePenalty")
         return params
 
