@@ -58,7 +58,8 @@ The mod supports multiple text-generation methods (tested options listed below).
 #### Free API Options:  
 - **g4f** (No API keys needed)  
 - **OpenRouter** (Free keys: https://openrouter.ai/settings/keys – rate-limited)  
-- **io.net** (Free keys: https://ai.io.net/ai/api-keys – 500k tokens/day per model)  
+- **io.net** (Free keys: https://ai.io.net/ai/api-keys – 500k tokens/day per model)
+- **Google AI Studio** (Free keys: https://aistudio.google.com/apikey – 1500 requests/day)  
 
 #### Paid API Options:  
 - **OpenRouter** (Wide model selection, pay-per-use)  
