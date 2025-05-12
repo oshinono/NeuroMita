@@ -675,14 +675,10 @@ class ChatModel:
         }
         return final_params
 
-    def remove_unsupported_params(self, model_name: str, params: Dict[str, Any]) -> Dict[str, Any]:
-        # ... (keep existing remove_unsupported_params method) ...
-        # Example: Some specific Gemini models might not support all general Gemini params.
-        # model_name_lower = model_name.lower()
-        # if "gemini-1.5-pro-preview" in model_name_lower: # Fictional example
-        #     if 'presencePenalty' in params: # If it was mistakenly added
-        #         del params['presencePenalty']
-        #         logger.info("Removed 'presencePenalty' as it's not supported by gemini-1.5-pro-preview.")
+    def remove_unsupported_params(self,model,params):
+        """Тут удаляем все лишние параметры"""
+        if model in ("gemini-2.5-pro-exp-03-25","gemini-2.5-flash-preview-04-17"):
+            params.pop("presencePenalty", None)
         return params
 
 

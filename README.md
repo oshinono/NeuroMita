@@ -59,10 +59,11 @@ Translation (deepseek) [English readme](README_EN.md)
 Мод в плане генерации текста можно запустить в нескольких форматах. Говорится о форматах, которые в той или иной мере тестировались.
 #### Основные
    - API Бесплатно:
-     - используя галку g4f
-     - используя бесплатные ключи опенроутер https://openrouter.ai/settings/keys. У аккаунтов опенроутера есть лимиты (в минуту, дневные).
-     - используя бесплатные ключи io.net https://ai.io.net/ai/api-keys - лимиты: 500к токенов в день на модель.
-     - используя google ai studio https://aistudio.google.com/apikey - лимиты громадные: 1500 запросов в день, контекст 1 лям (можно делать историю больше)
+     - gpt4free g4f - отдельная галка, без ключей.
+     - openrouter https://openrouter.ai/settings/keys. У аккаунтов опенроутера есть лимиты (в минуту, дневные).
+     - io.net https://ai.io.net/ai/api-keys - лимиты: 500к токенов в день на модель.
+     - google ai studio https://aistudio.google.com/apikey - лимиты громадные: 1500 запросов в день, контекст 1 лям (можно делать историю больше)
+     - chutes.ai https://chutes.ai/app/api (Безлимитно?)
    - API Платно 
      - (РФ) оплачивая ключ здесь https://console.proxyapi.ru/billing , промокод NEUROMITA на 25% скидки в первый раз. Стабильно, но учитывайте расход.
      - Openrouter с оплатой, очень большой список моделей, оценить предлагаю самим.
@@ -139,6 +140,12 @@ Translation (deepseek) [English readme](README_EN.md)
 И самое главное ссылка:
  - https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=ТУТ_ДОЛЖЕН_БЫТЬ_ВАШ_СГЕНЕРИРОВАННЫЙ_КЛЮЧ
 Посмотрите на ссылку внимательно, вместо текста ваш ключ.
+
+### Chutes.ai
+Нужна галка "через Request", ссылка https://llm.chutes.ai/v1/chat/completions
+- модель deepseek-ai/DeepSeek-V3-0324
+
+Другие модели - https://chutes.ai/app
    
 ### ProxiApi: 
   Внимание, ВАМ НЕ НУЖЕН ПРЕМ ЗА 1500, можно просто пополнить баланс на 200 и более рублей. Промокод NEUROMITA на 25% скидки разово. 
