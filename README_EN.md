@@ -60,6 +60,7 @@ The mod supports multiple text-generation methods (tested options listed below).
 - **OpenRouter** (Free keys: https://openrouter.ai/settings/keys – rate-limited)  
 - **io.net** (Free keys: https://ai.io.net/ai/api-keys – 500k tokens/day per model)
 - **Google AI Studio** (Free keys: https://aistudio.google.com/apikey – 1500 requests/day)  
+- **Chutes.ai** (Free keys: https://chutes.ai/app/api unlimited?)
 
 #### Paid API Options:  
 - **OpenRouter** (Wide model selection, pay-per-use)  
@@ -131,6 +132,12 @@ Most importantly, the URL should look like this:
 
 https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=YOUR_GENERATED_KEY_HERE
 Check the URL carefully—replace the placeholder text with your actual key.
+
+### *Chutes.ai*
+Need checkbutton "via Request", url https://llm.chutes.ai/v1/chat/completions
+- model deepseek-ai/DeepSeek-V3-0324
+
+Other models - https://chutes.ai/app
 
 ## 3) Voice Generation  
 Two options: **Telegram bots** or **local generation**.  
