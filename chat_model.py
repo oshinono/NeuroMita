@@ -764,7 +764,7 @@ class ChatModel:
     def remove_unsupported_params(self,model,params):
         """Тут удаляем все лишние параметры"""
         if model in ("gemini-2.5-pro-exp-03-25","gemini-2.5-flash-preview-04-17"):
-            params.pop("presencePenalty")
+            params.pop("presencePenalty", None)
         return params
 
 
