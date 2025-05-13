@@ -127,7 +127,7 @@ class ChatModel:
         except ImportError:
             logger.info("Модуль g4f не найден (при проверке). Попытка первоначальной установки...")
 
-            target_version = self.gui.settings.get("G4F_VERSION", "4.7.7")
+            target_version = self.gui.settings.get("G4F_VERSION", "0.4.7.7")
             package_spec = f"g4f=={target_version}" if target_version != "latest" else "g4f"
 
             if self.pip_installer:
