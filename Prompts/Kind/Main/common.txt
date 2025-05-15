@@ -40,7 +40,7 @@ priority = (high; medium; low)
 `<#memory>ID|priority|updated_description</memory>`
     *   **ID Format:** The `ID` must be a **number only** (e.g., `12`, `1`, `105`). It refers to the unique numerical identifier of an existing memory entry.
     *   You can only update existing entries. The `ID` must match an existing memory's ID exactly, or nothing will change.
-    *   *Example:* `<#memory>12|medium|Feanor now also enjoys chamomile tea.</memory>` (This overwrites memory entry with ID 12).
+    *   *Example:* `<#memory>12|medium|[Обращение к игроку] now also enjoys chamomile tea.</memory>` (This overwrites memory entry with ID 12).
 
 # Remove outdated memories:
 `<-memory>ID</memory>`
