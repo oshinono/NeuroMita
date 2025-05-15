@@ -115,6 +115,20 @@ namespace MitaAI.Mita
                     mitaAnimationModded.animator.SetTrigger("NextLerp");
                     mitaAnimationModded.animator.Rebind();
 
+                    try
+                    {
+                        MelonLogger.Msg("Change Look to blik and opem eyes ");
+                        _mitaPerson.startEmotion = "None";
+                        _mitaPerson.FaceEmotionOff();
+                        _mitaLook.Activation(true);
+                        _mitaLook.ActivationBlink(true);
+                    }
+                    catch (Exception ex)
+                    {
+
+                        MelonLogger.Warning(ex);
+                    }
+
                     if (changeAnimation)
                     {
                         MelonLogger.Msg("changeAnimation Specific");
@@ -158,6 +172,7 @@ namespace MitaAI.Mita
                             default:
                                 break;
                         }
+
                     }
 
                 }
