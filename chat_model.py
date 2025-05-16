@@ -636,7 +636,7 @@ class ChatModel:
 
     def generate_request_gemini(self, combined_messages):
         params = self.get_params()
-
+        self.clear_endline_sim(params)
         data = {
             "contents": [
                 {"role": "model" if msg["role"] == "assistant" else msg["role"], "parts": [{"text": msg["content"]}]}
@@ -676,6 +676,7 @@ class ChatModel:
 
         # Объединяем params в data
         params = self.get_params()
+        self.clear_endline_sim(params)
         data.update(params)
 
         headers = {
@@ -759,7 +760,15 @@ class ChatModel:
         }
         final_params.update(self.get_params(model))
 
+        self.clear_endline_sim(final_params)
+
         return final_params
+
+    def clear_endline_sim(self,params):
+        for key, value in params.items():
+            if isinstance(value, str):
+                params[key] = value.replace("'\x00", "")
+
 
     def remove_unsupported_params(self,model,params):
         """Тут удаляем все лишние параметры"""

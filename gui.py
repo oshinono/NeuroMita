@@ -141,7 +141,7 @@ class ChatGUI:
 
         try:
             self.pip_installer = PipInstaller(
-                script_path=r"\libs\python\python.exe",
+                script_path=r"libs\python\python.exe",
                 libs_path="Lib",
                 update_log=logger.info
             )
@@ -1922,7 +1922,6 @@ class ChatGUI:
             widget.event_generate("<<Cut>>")
 
     def cmd_paste(self, widget):
-        logger.info("555")
         # Обработчик команды вставки
         if isinstance(widget, (tk.Entry, ttk.Entry, tk.Text)):
             widget.event_generate("<<Paste>>")
