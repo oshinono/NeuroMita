@@ -766,15 +766,15 @@ class ChatModel:
     
     # This method was in the "невошедшие" section of V1/V3 but has a different signature than add_temporary_system_info.
     # The current `add_temporary_system_info` which uses `self.infos_to_add_to_history` is the primary mechanism in the new system.
-    # def add_temporary_system_message(self, messages: List[Dict], content: str):
-    #     if not isinstance(messages, list):
-    #         logger.error("add_temporary_system_message ожидает список сообщений.")
-    #         return
-    #     system_message = {
-    #         "role": "system",
-    #         "content": content
-    #     }
-    #     messages.append(system_message)
-    #     logger.debug(f"Временно добавлено системное сообщение в переданный список: {content[:100]}...")
+    def add_temporary_system_message(self, messages: List[Dict], content: str):
+        if not isinstance(messages, list):
+            logger.error("add_temporary_system_message ожидает список сообщений.")
+            return
+        system_message = {
+            "role": "system",
+            "content": content
+        }
+        messages.append(system_message)
+        logger.debug(f"Временно добавлено системное сообщение в переданный список: {content[:100]}...")
 
     # endregion

@@ -9,6 +9,7 @@ from typing import Dict, List, Any
 
 # Assuming dsl_engine.py is in a DSL folder within NeuroMita
 from DSL.dsl_engine import DslInterpreter # PROMPTS_ROOT is managed by DslInterpreter
+from DSL.path_resolver import LocalPathResolver
 from MemorySystem import MemorySystem
 from HistoryManager import HistoryManager
 from utils import clamp, SH # SH for masking keys if needed elsewhere
@@ -55,8 +56,8 @@ class Character:
         self.silero_turn_off_video = silero_turn_off_video
         self.miku_tts_name = miku_tts_name
         self.short_name = short_name
-        
-        self.base_data_path = os.path.join("Prompts", self.char_id) # Path for character's DSL files
+        self.prompts_root = os.path.abspath("Prompts")
+        self.base_data_path = os.path.join(self.prompts_root, self.char_id) # Path for character's DSL files
         self.main_template_path_relative = "main_template.txt"
 
         self.variables: Dict[str, Any] = {} # Initialize first
@@ -87,7 +88,11 @@ class Character:
                                                  # This will overwrite defaults if history exists.
 
         # Initialize DSL interpreter
-        self.dsl_interpreter = DslInterpreter(self)
+        path_resolver_instance = LocalPathResolver(
+                global_prompts_root=self.prompts_root, 
+                character_base_data_path=self.base_data_path
+            )
+        self.dsl_interpreter = DslInterpreter(self, path_resolver_instance)
 
         # Set initial dynamic variables
         self.set_variable("SYSTEM_DATETIME", datetime.datetime.now().isoformat(" ", "minutes"))
