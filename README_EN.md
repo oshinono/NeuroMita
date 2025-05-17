@@ -58,7 +58,9 @@ The mod supports multiple text-generation methods (tested options listed below).
 #### Free API Options:  
 - **g4f** (No API keys needed)  
 - **OpenRouter** (Free keys: https://openrouter.ai/settings/keys – rate-limited)  
-- **io.net** (Free keys: https://ai.io.net/ai/api-keys – 500k tokens/day per model)  
+- **io.net** (Free keys: https://ai.io.net/ai/api-keys – 500k tokens/day per model)
+- **Google AI Studio** (Free keys: https://aistudio.google.com/apikey – 1500 requests/day)  
+- **Chutes.ai** (Free keys: https://chutes.ai/app/api unlimited?)
 
 #### Paid API Options:  
 - **OpenRouter** (Wide model selection, pay-per-use)  
@@ -103,6 +105,39 @@ Full list: https://openrouter.ai/models?max_price=0
 API: https://api.intelligence.io.solutions/api/v1/  
 - `meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8`  
 Full list: https://docs.io.net/reference/get-started-with-io-intelligence-api  
+
+### *Google Ai Studio*
+First, go to this website: https://aistudio.google.com/. If it says your country is not supported (e.g., Russia), only then will you need Step 1. If you don’t have any regional restrictions, skip straight to Step 2.
+
+To use it, you’ll need a file called "hosts" (find it on the server for now), which must be placed in this directory:
+C:\Windows\System32\drivers\etc
+Installation steps: Download → Copy → Paste with replacement.
+
+Follow this exact order—do not move the file. THIS IS IMPORTANT, as bugs may occur otherwise.
+
+After completing these steps, go to this website: https://aistudio.google.com/apikey, sign up, and generate an API key.
+
+To use the model directly in the module, insert the gemini-2.0-flash model.
+
+![image](https://github.com/user-attachments/assets/55c90501-b77d-416a-8073-cd97f9f620fb)
+
+The key fields should remain empty because the key is embedded in the URL.
+Also, make sure to enable two checkboxes in the module:
+
+"Via Request"
+
+"Gemini for ProxiAPI"
+
+Most importantly, the URL should look like this:
+
+https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=YOUR_GENERATED_KEY_HERE
+Check the URL carefully—replace the placeholder text with your actual key.
+
+### *Chutes.ai*
+Need checkbutton "via Request", url https://llm.chutes.ai/v1/chat/completions
+- model deepseek-ai/DeepSeek-V3-0324
+
+Other models - https://chutes.ai/app
 
 ## 3) Voice Generation  
 Two options: **Telegram bots** or **local generation**.  
