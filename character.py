@@ -102,21 +102,18 @@ class Character:
         return self.variables.get(name, default)
 
     def set_variable(self, name: str, value: Any):
-        # Value normalization from models/character.py
         if isinstance(value, str):
             val_lower = value.lower()
             if val_lower == "true": value = True
             elif val_lower == "false": value = False
-            # Attempt numeric conversion only if it doesn't break things.
-            # Be cautious: "ID_001" should not become a number.
-            # Only convert if it purely looks like a number.
-            elif value.isdigit(): # Check if string is all digits (integer)
+
+            elif value.isdigit(): 
                  try: value = int(value)
-                 except ValueError: pass # Keep as string if int conversion fails
-            elif re.fullmatch(r"-?\d+(\.\d+)?", value): # Check for float pattern
+                 except ValueError: pass 
+            elif re.fullmatch(r"-?\d+(\.\d+)?", value): 
                  try: value = float(value)
-                 except ValueError: pass # Keep as string
-            else: # Not a simple bool or number, strip quotes if present
+                 except ValueError: pass 
+            else: 
                 if (value.startswith("'") and value.endswith("'")) or \
                    (value.startswith('"') and value.endswith('"')):
                     value = value[1:-1]
