@@ -30,6 +30,8 @@ MANDATORY_INSERTS: set[str] = {"SYS_INFO"}
 dsl_execution_logger = logging.getLogger("dsl_execution")
 dsl_script_logger = logging.getLogger("dsl_script")
 
+# if TYPE_CHECKING:
+#     from app.models.character import Character # For type hinting
 
 if not any(getattr(h, "name", "") == "dsl_script_simple"
            for h in dsl_script_logger.handlers):
@@ -371,15 +373,28 @@ class DslInterpreter:
 
                 for num, raw in enumerate(logical_lines, 1):
                     stripped = raw.strip()
-                    if not stripped or stripped.startswith("//"):
+                    if not stripped or stripped.startswith("//"): 
                         continue
 
                     skipping = any(level["skip"] for level in if_stack)
-                    cmd_for_log = stripped.split(maxsplit=1)[0].upper()
+                    command_part_for_log = stripped.split("//", 1)[0].strip()
+                    cmd_for_log = command_part_for_log.split(maxsplit=1)[0].upper()
+
 
                     if cmd_for_log == "IF":
-                        cond_str = stripped[3:].rstrip()
-                        if cond_str.upper().endswith(" THEN"): cond_str = cond_str[:-5].rstrip()
+                        raw_condition_text = stripped[len("IF"):].strip()
+                        
+                        comment_start_index = raw_condition_text.find("//")
+                        if comment_start_index != -1:
+                            condition_without_comment = raw_condition_text[:comment_start_index].strip()
+                        else:
+                            condition_without_comment = raw_condition_text.strip()
+
+                        if condition_without_comment.upper().endswith(" THEN"):
+                            cond_str = condition_without_comment[:-len(" THEN")].strip()
+                        else:
+                            cond_str = condition_without_comment
+                        
                         parent_skip  = skipping
                         cond_met = False
                         if not parent_skip:
@@ -396,8 +411,19 @@ class DslInterpreter:
                         parent_skip = any(l["skip"] for l in if_stack[:-1])
                         cond_met_els = False
                         if not parent_skip and not lvl["branch_taken"]:
-                            cond_str = stripped[7:].rstrip()
-                            if cond_str.upper().endswith(" THEN"): cond_str = cond_str[:-5].rstrip()
+                            raw_condition_text = stripped[len("ELSEIF"):].strip()
+
+                            comment_start_index = raw_condition_text.find("//")
+                            if comment_start_index != -1:
+                                condition_without_comment = raw_condition_text[:comment_start_index].strip()
+                            else:
+                                condition_without_comment = raw_condition_text.strip()
+
+                            if condition_without_comment.upper().endswith(" THEN"):
+                                cond_str = condition_without_comment[:-len(" THEN")].strip()
+                            else:
+                                cond_str = condition_without_comment
+                                
                             cond_met_els = self._eval_condition(cond_str, resolved_script_id, num, raw)
                             lvl["branch_taken"] = cond_met_els
                             lvl["skip"] = not cond_met_els
@@ -408,28 +434,35 @@ class DslInterpreter:
                         )
                         continue
 
-                    if cmd_for_log == "ELSE":
+                    if cmd_for_log == "ELSE": 
                         if not if_stack: raise DslError("ELSE without IF", resolved_script_id, num, raw)
+                        
+                        if command_part_for_log.upper() != "ELSE":
+                             raise DslError("ELSE statement should not have conditions or other text on the same line before a comment.", resolved_script_id, num, raw)
+
                         lvl = if_stack[-1]
                         parent_skip = any(l["skip"] for l in if_stack[:-1])
                         lvl["skip"] = parent_skip or lvl["branch_taken"]
-                        if not lvl["skip"]: lvl["branch_taken"] = True
+                        if not lvl["skip"]: lvl["branch_taken"] = True 
                         dsl_execution_logger.debug(
                             f"ELSE skip={lvl['skip']} ({os.path.basename(rel_script_path)}:{num})"
                         )
                         continue
 
-                    if cmd_for_log == "ENDIF":
+                    if cmd_for_log == "ENDIF": 
                         if not if_stack: raise DslError("ENDIF without IF", resolved_script_id, num, raw)
+                        if command_part_for_log.upper() != "ENDIF":
+                             raise DslError("ENDIF statement should not have other text on the same line before a comment.", resolved_script_id, num, raw)
                         if_stack.pop()
                         dsl_execution_logger.debug(f"ENDIF ({os.path.basename(rel_script_path)}:{num})")
                         continue
                     
-                    if skipping: continue
+                    if skipping: continue 
 
-                    parts = stripped.split(maxsplit=1)
-                    command = parts[0].upper()
+                    parts = command_part_for_log.split(maxsplit=1)
+                    command = parts[0].upper() 
                     args = parts[1] if len(parts) > 1 else ""
+
 
                     if command == "SET":
                         if "=" not in args: raise DslError("SET requires '='", resolved_script_id, num, raw)
@@ -448,7 +481,7 @@ class DslInterpreter:
                         continue
                     
                     if command == "RETURN":
-                        raw_arg = args.strip()
+                        raw_arg = args.strip() 
                         raw_arg_expanded = self._expand_inline_loads(raw_arg, script_path_for_error=resolved_script_id, line_num=num, line_content=raw)
                         txt = ""
 
