@@ -3,9 +3,8 @@ RULE LoveTagHandler
     MATCH REGEX "<love>([+-]?\d*\.?\d+)</love>" CAPTURE (love_value_str)
     ACTIONS
         SET love_value = float(love_value_str)
-        // Use a 'default' function to initialize 'love' if it doesn't exist
-        SET love = default(love, 0.0) + love_value
-        LOG "Character love updated by " + str(love_value) + ". New love: " + str(love)
+        SET Love = Love + int(love_value)
+        LOG "Character love updated by " + str(love_value) + ". New love: " + str(Love)
         REMOVE_MATCH // This will remove "<love>X</love>" from the response
     END_ACTIONS
 END_RULE
@@ -40,3 +39,11 @@ RULE ActionParams
         REMOVE_MATCH
     END_ACTIONS
 END_RULE
+
+DEBUG_DISPLAY
+    LabelForAttitude: attitude      // "LabelForAttitude" будет видно в UI, "attitude" - имя переменной
+    CurrentBoredom: boredom
+    StressLevel: stress
+    LoveParameter: Love           // <<< Наша новая переменная
+    "Состояние FSM": current_fsm_state // Можно использовать строки в кавычках для меток с пробелами
+END_DEBUG_DISPLAY

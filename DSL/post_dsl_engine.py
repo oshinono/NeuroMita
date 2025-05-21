@@ -42,25 +42,35 @@ class PostDslInterpreter:
         self.character = character
         self.resolver = resolver
         self.rules: List[PostDslRule] = []
-        self._load_rules()
+        self.debug_display_config: Dict[str, str] = {}  # { "LabelInUI": "variable_name" }
+        self._load_rules_and_configs()  # Переименуем или вызовем новый метод
 
-    def _parse_dsl_script_text_to_rules(self, script_text: str) -> List[PostDslRule]:
+    def _parse_dsl_script_text_to_rules_and_config(self, script_text: str) -> Tuple[List[PostDslRule], Dict[str, str]]:
         """
         Parses the content of a .postscript file into a list of PostDslRule objects.
         This is a simplified parser. A more robust solution might use a dedicated parsing library
         or more complex regex for structure.
         """
         rules = []
+        debug_config = {}
         current_rule_name = None
         current_match_type = None
         current_pattern_str = None
         current_capture_names = []
         current_action_lines = []
         in_actions_block = False
+        in_debug_display_block = False
 
         for line_num, line_content in enumerate(script_text.splitlines(), 1):
             line = line_content.strip()
             if not line or line.startswith("//"):
+                continue
+
+            # 1. Удаляем комментарии в конце строки
+            line = line.split("//", 1)[0].strip()
+
+            # 2. Пропускаем пустые строки или строки, которые были только комментариями
+            if not line:
                 continue
 
             if line.upper().startswith("RULE "):
@@ -105,34 +115,58 @@ class PostDslInterpreter:
                 # This logic is now handled inside PostDslRule constructor from action_lines
                 pass
 
-        if current_rule_name and current_match_type and current_pattern_str:  # Add last rule if file doesn't end with END_RULE
+            if line.upper() == "DEBUG_DISPLAY":
+                in_debug_display_block = True
+                # Если предыдущий блок был RULE, его нужно завершить
+                if current_rule_name and current_match_type and current_pattern_str:
+                    rules.append(
+                        PostDslRule(current_rule_name, current_match_type, current_pattern_str, current_capture_names,
+                                    current_action_lines))
+                    current_rule_name = None  # Сброс, чтобы не мешать DEBUG_DISPLAY
+                continue  # Переходим к следующей строке
+
+            if line.upper() == "END_DEBUG_DISPLAY":
+                in_debug_display_block = False
+                continue
+
+            if in_debug_display_block:
+                if ":" in line:
+                    label_part, var_name_part = line.split(":", 1)
+                    label = label_part.strip().strip('"')  # Убираем кавычки, если есть
+                    var_name = var_name_part.strip()
+                    debug_config[label] = var_name
+                else:
+                    logger.warning(
+                        f"[{self.character.char_id}] Post-DSL: Malformed line in DEBUG_DISPLAY: '{line_content}'")
+
+            # Не забыть добавить последнее правило, если оно не было закрыто END_RULE перед DEBUG_DISPLAY
+        if current_rule_name and current_match_type and current_pattern_str:
             rules.append(PostDslRule(current_rule_name, current_match_type, current_pattern_str, current_capture_names,
                                      current_action_lines))
 
-        logger.info(f"[{self.character.char_id}] Parsed {len(rules)} post-processing rules.")
-        return rules
+        logger.info(
+            f"[{self.character.char_id}] Parsed {len(rules)} post-rules and {len(debug_config)} debug display entries.")
+        return rules, debug_config
 
-    def _load_rules(self):
+    def _load_rules_and_configs(self):  # Новое имя метода
         self.rules = []
-        # Example: scan a directory for all .postscript files for the character
-        # This needs the resolver to support listing files or a predefined main rule file
-        # For simplicity, let's assume a main file:
-        main_rules_file = "PostScripts/main_rules.postscript"  # Relative to character's base_data_path
+        self.debug_display_config = {}
+        main_rules_file = "PostScripts/main_rules.postscript"
         try:
-            # Note: The resolver in OpenMita needs to be configured/used correctly here
-            # For simplicity, let's assume a way to get the path
             char_base_path = self.character.base_data_path
-            full_path_to_rules = self.resolver.resolve_path(
-                main_rules_file)  # This should work if main_rules_file is relative to char_base_path
+            # Используем resolve_path из LocalPathResolver (или другого AbstractPathResolver)
+            full_path_to_rules = self.resolver.resolve_path(main_rules_file)
 
             content = self.resolver.load_text(full_path_to_rules, f"post_dsl script for {self.character.char_id}")
-            self.rules = self._parse_dsl_script_text_to_rules(content)
+            self.rules, self.debug_display_config = self._parse_dsl_script_text_to_rules_and_config(
+                content)  # Обновлено
             logger.info(
-                f"[{self.character.char_id}] Loaded {len(self.rules)} post-processing rules from {main_rules_file}")
-        except Exception as e:  # PathResolverError, DslError from parsing, FileNotFoundError
+                f"[{self.character.char_id}] Loaded post-processing rules and debug config from {main_rules_file}")
+        except Exception as e:
             logger.info(
-                f"[{self.character.char_id}] No/Empty post-processing rules file found at {main_rules_file} or error loading: {e}. Post-DSL will be inactive.")
+                f"[{self.character.char_id}] No/Empty post-processing rules/config file found at {main_rules_file} or error loading: {e}. Post-DSL will be inactive/default debug.")
             self.rules = []
+            self.debug_display_config = {}  # Сброс
 
     def _eval_dsl_expression(self, expr: str, context_vars: Dict[str, Any]) -> Any:
         """

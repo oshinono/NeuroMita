@@ -347,21 +347,31 @@ class Character:
         self.save_character_state_to_history(messages)
     #endregion
 
+    # In OpenMita/character.py, class Character
     def current_variables_string(self) -> str:
-        """Returns a string representation of key variables for UI/debug display."""
-        vars_to_display = {
-            "Attitude": self.get_variable("attitude", "N/A"),
-            "Boredom": self.get_variable("boredom", "N/A"),
-            "Stress": self.get_variable("stress", "N/A"),
-        }
-
-        if self.char_id == "Crazy":
-            vars_to_display["Secret Exposed"] = self.get_variable("secretExposed", "N/A")
-            vars_to_display["FSM State"] = self.get_variable("current_fsm_state", "N/A")
-
+        """Returns a string representation of key variables for UI/debug display,
+           customizable via Post-DSL DEBUG_DISPLAY section."""
         display_str = f"Character: {self.name} ({self.char_id})\n"
+
+        vars_to_display = {}
+        # Используем конфигурацию из PostDslInterpreter, если она есть
+        if hasattr(self, 'post_dsl_interpreter') and self.post_dsl_interpreter.debug_display_config:
+            for label, var_name in self.post_dsl_interpreter.debug_display_config.items():
+                vars_to_display[label] = self.get_variable(var_name, "N/A")
+        else:
+            # Фоллбэк на старую логику, если конфигурации нет
+            vars_to_display = {
+                "Attitude": self.get_variable("attitude", "N/A"),
+                "Boredom": self.get_variable("boredom", "N/A"),
+                "Stress": self.get_variable("stress", "N/A"),
+            }
+            if self.char_id == "Crazy":  # Пример специфичной для персонажа логики (лучше тоже в DEBUG_DISPLAY)
+                vars_to_display["Secret Exposed"] = self.get_variable("secretExposed", "N/A")
+                vars_to_display["FSM State"] = self.get_variable("current_fsm_state", "N/A")
+
         for key, val in vars_to_display.items():
             display_str += f"- {key}: {val}\n"
+
         return display_str.strip()
         
     def adjust_attitude(self, amount: float):
