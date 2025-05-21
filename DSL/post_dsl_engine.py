@@ -1,0 +1,265 @@
+# OpenMita/DSL/post_dsl_engine.py
+import re
+from typing import List, Dict, Any, Tuple, Callable, TYPE_CHECKING
+from Logger import logger  # Use OpenMita's logger
+
+if TYPE_CHECKING:
+    from character import Character  # OpenMita's Character
+    from DSL.path_resolver import AbstractPathResolver
+
+
+# (Consider moving DslError from Editor's dsl_engine to a common error module if not already)
+# For now, define a local one or adapt from existing.
+class PostDslError(Exception):
+    pass  # Basic error class
+
+
+class PostDslRule:
+    def __init__(self, name: str, match_type: str, pattern_str: str, capture_names: List[str], action_lines: List[str]):
+        self.name = name
+        self.match_type = match_type  # "TEXT" or "REGEX"
+        self.pattern_str = pattern_str
+        self.compiled_pattern = re.compile(pattern_str) if match_type == "REGEX" else pattern_str
+        self.capture_names = capture_names
+        self.action_lines = action_lines
+        self.remove_match_flag = False
+        self.replace_with_expr: str | None = None
+
+        # Pre-parse action lines for REMOVE_MATCH or REPLACE_MATCH
+        final_action_lines = []
+        for line in action_lines:
+            if line.strip().upper() == "REMOVE_MATCH":
+                self.remove_match_flag = True
+            elif line.strip().upper().startswith("REPLACE_MATCH WITH "):
+                self.replace_with_expr = line.strip()[len("REPLACE_MATCH WITH "):].strip()
+            else:
+                final_action_lines.append(line)
+        self.action_lines = final_action_lines
+
+
+class PostDslInterpreter:
+    def __init__(self, character: "Character", resolver: "AbstractPathResolver"):
+        self.character = character
+        self.resolver = resolver
+        self.rules: List[PostDslRule] = []
+        self._load_rules()
+
+    def _parse_dsl_script_text_to_rules(self, script_text: str) -> List[PostDslRule]:
+        """
+        Parses the content of a .postscript file into a list of PostDslRule objects.
+        This is a simplified parser. A more robust solution might use a dedicated parsing library
+        or more complex regex for structure.
+        """
+        rules = []
+        current_rule_name = None
+        current_match_type = None
+        current_pattern_str = None
+        current_capture_names = []
+        current_action_lines = []
+        in_actions_block = False
+
+        for line_num, line_content in enumerate(script_text.splitlines(), 1):
+            line = line_content.strip()
+            if not line or line.startswith("//"):
+                continue
+
+            if line.upper().startswith("RULE "):
+                if current_rule_name:  # Starting a new rule, finalize previous one
+                    rules.append(
+                        PostDslRule(current_rule_name, current_match_type, current_pattern_str, current_capture_names,
+                                    current_action_lines))
+                current_rule_name = line.split(maxsplit=1)[1]
+                current_match_type = None
+                current_pattern_str = None
+                current_capture_names = []
+                current_action_lines = []
+                in_actions_block = False
+            elif current_rule_name and line.upper().startswith("MATCH "):
+                match_parts = line.split(maxsplit=2)  # MATCH TYPE "PATTERN"
+                current_match_type = match_parts[1].upper()
+                pattern_part = match_parts[2]
+
+                capture_match = re.search(r"CAPTURE\s*\((.*?)\)", pattern_part, re.IGNORECASE)
+                if capture_match:
+                    current_capture_names = [name.strip() for name in capture_match.group(1).split(',')]
+                    pattern_part = pattern_part[:capture_match.start()].strip()  # Remove CAPTURE part
+
+                if current_match_type == "TEXT":
+                    current_pattern_str = pattern_part.strip('"')
+                elif current_match_type == "REGEX":
+                    current_pattern_str = pattern_part.strip('"')
+            elif current_rule_name and line.upper() == "ACTIONS":
+                in_actions_block = True
+            elif current_rule_name and line.upper() == "END_ACTIONS":
+                in_actions_block = False
+            elif current_rule_name and line.upper() == "END_RULE":
+                if current_rule_name and current_match_type and current_pattern_str:
+                    rules.append(
+                        PostDslRule(current_rule_name, current_match_type, current_pattern_str, current_capture_names,
+                                    current_action_lines))
+                current_rule_name = None  # Reset for next rule
+                in_actions_block = False
+            elif in_actions_block:
+                current_action_lines.append(line)
+            elif current_rule_name and not in_actions_block and line:  # For REMOVE_MATCH or REPLACE_MATCH outside ACTIONS block
+                # This logic is now handled inside PostDslRule constructor from action_lines
+                pass
+
+        if current_rule_name and current_match_type and current_pattern_str:  # Add last rule if file doesn't end with END_RULE
+            rules.append(PostDslRule(current_rule_name, current_match_type, current_pattern_str, current_capture_names,
+                                     current_action_lines))
+
+        logger.info(f"[{self.character.char_id}] Parsed {len(rules)} post-processing rules.")
+        return rules
+
+    def _load_rules(self):
+        self.rules = []
+        # Example: scan a directory for all .postscript files for the character
+        # This needs the resolver to support listing files or a predefined main rule file
+        # For simplicity, let's assume a main file:
+        main_rules_file = "PostScripts/main_rules.postscript"  # Relative to character's base_data_path
+        try:
+            # Note: The resolver in OpenMita needs to be configured/used correctly here
+            # For simplicity, let's assume a way to get the path
+            char_base_path = self.character.base_data_path
+            full_path_to_rules = self.resolver.resolve_path(
+                main_rules_file)  # This should work if main_rules_file is relative to char_base_path
+
+            content = self.resolver.load_text(full_path_to_rules, f"post_dsl script for {self.character.char_id}")
+            self.rules = self._parse_dsl_script_text_to_rules(content)
+            logger.info(
+                f"[{self.character.char_id}] Loaded {len(self.rules)} post-processing rules from {main_rules_file}")
+        except Exception as e:  # PathResolverError, DslError from parsing, FileNotFoundError
+            logger.info(
+                f"[{self.character.char_id}] No/Empty post-processing rules file found at {main_rules_file} or error loading: {e}. Post-DSL will be inactive.")
+            self.rules = []
+
+    def _eval_dsl_expression(self, expr: str, context_vars: Dict[str, Any]) -> Any:
+        """
+        Evaluates a DSL expression.
+        This should be adapted from the editor's DslInterpreter._eval_expr.
+        It needs access to character variables and the local context_vars (from regex captures).
+        """
+        safe_globals = {
+            "__builtins__": {"str": str, "int": int, "float": float, "len": len, "True": True, "False": False,
+                             "None": None, "round": round, "abs": abs, "max": max, "min": min},
+            "default": lambda var_name, def_val: context_vars.get(var_name,
+                                                                  self.character.variables.get(var_name, def_val))
+        }
+
+        # Merge character variables and context variables for evaluation
+        # Context vars (from regex) should take precedence if names clash
+        eval_scope = self.character.variables.copy()
+        eval_scope.update(context_vars)
+
+        try:
+            # A simplified eval. The editor's version handles auto-str casting and NameError retries.
+            # Consider reusing that more advanced logic.
+            return eval(expr, safe_globals, eval_scope)
+        except Exception as e:
+            logger.error(f"[{self.character.char_id}] Post-DSL: Error evaluating expression '{expr}': {e}",
+                         exc_info=True)
+            raise PostDslError(f"Error evaluating expression: {expr}") from e
+
+    def _execute_actions(self, rule: PostDslRule, match_object: re.Match | None, current_response_segment: str) -> \
+    Tuple[str, bool]:
+        """
+        Executes actions for a rule.
+        Returns the modified segment and a boolean indicating if a match was processed.
+        """
+        context_vars = {}
+        if rule.match_type == "REGEX" and match_object:
+            captured_values = match_object.groups()
+            if len(captured_values) == len(rule.capture_names):
+                for i, name in enumerate(rule.capture_names):
+                    context_vars[name] = captured_values[i]
+            else:  # Fallback if capture group names don't match count
+                for i, val in enumerate(captured_values):
+                    context_vars[f"capture_{i + 1}"] = val
+
+        # Execute SET, LOG commands
+        for line in rule.action_lines:
+            parts = line.split(maxsplit=1)
+            command = parts[0].upper()
+            args = parts[1] if len(parts) > 1 else ""
+
+            if command == "SET":
+                var_name, expr = [s.strip() for s in args.split("=", 1)]
+                try:
+                    value = self._eval_dsl_expression(expr, context_vars)
+                    self.character.set_variable(var_name, value)
+                    # Update context_vars as well for subsequent actions in the same rule
+                    context_vars[var_name] = value
+                except Exception as e:
+                    logger.error(
+                        f"[{self.character.char_id}] Post-DSL Rule '{rule.name}': Failed to SET '{var_name}': {e}")
+            elif command == "LOG":
+                try:
+                    log_message = self._eval_dsl_expression(args, context_vars)
+                    logger.info(f"[{self.character.char_id}] Post-DSL Rule '{rule.name}' LOG: {log_message}")
+                except Exception as e:
+                    logger.error(f"[{self.character.char_id}] Post-DSL Rule '{rule.name}': Failed to LOG: {e}")
+
+        # Handle REMOVE_MATCH or REPLACE_MATCH
+        processed_segment = current_response_segment
+        if rule.remove_match_flag:
+            processed_segment = ""  # The matched part will be removed
+        elif rule.replace_with_expr:
+            try:
+                replacement_text = str(self._eval_dsl_expression(rule.replace_with_expr, context_vars))
+                processed_segment = replacement_text
+            except Exception as e:
+                logger.error(
+                    f"[{self.character.char_id}] Post-DSL Rule '{rule.name}': Failed to evaluate REPLACE_MATCH expression: {e}. Match not replaced.")
+                return current_response_segment, False  # Return original segment, indicate no successful processing for this specific action
+
+        return processed_segment, True
+
+    def process(self, response_text: str) -> str:
+        modified_response = response_text
+
+        for rule in self.rules:
+            new_response_parts = []
+            last_end = 0
+            processed_something_for_this_rule = False
+
+            if rule.match_type == "REGEX":
+                for match in rule.compiled_pattern.finditer(modified_response):
+                    start, end = match.span()
+                    new_response_parts.append(modified_response[last_end:start])  # Text before match
+
+                    original_match_text = match.group(0)
+                    replacement_text, processed_ok = self._execute_actions(rule, match, original_match_text)
+                    if processed_ok:
+                        new_response_parts.append(replacement_text)
+                        processed_something_for_this_rule = True
+                    else:  # Action failed, keep original match
+                        new_response_parts.append(original_match_text)
+                    last_end = end
+                new_response_parts.append(modified_response[last_end:])
+
+            elif rule.match_type == "TEXT":
+                current_pos = 0
+                while current_pos < len(modified_response):
+                    found_idx = modified_response.find(rule.pattern_str, current_pos)
+                    if found_idx == -1:
+                        new_response_parts.append(modified_response[current_pos:])
+                        break
+
+                    new_response_parts.append(modified_response[current_pos:found_idx])  # Text before match
+                    original_match_text = rule.pattern_str
+                    replacement_text, processed_ok = self._execute_actions(rule, None, original_match_text)
+
+                    if processed_ok:
+                        new_response_parts.append(replacement_text)
+                        processed_something_for_this_rule = True
+                    else:  # Action failed, keep original match
+                        new_response_parts.append(original_match_text)
+
+                    current_pos = found_idx + len(rule.pattern_str)
+                    last_end = current_pos  # Update last_end for text matches too
+
+            if processed_something_for_this_rule:
+                modified_response = "".join(new_response_parts)
+
+        return modified_response

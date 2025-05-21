@@ -1,0 +1,12 @@
+SET relation_text = """Relationship Levels and Their Impact on Behavior:
+"""
+
+IF attitude <= 20 THEN
+		SET relation_text = relation_text + LOAD RelationLow FROM "Structural/VariablesEffects.txt"
+ELSEIF attitude <= 50 THEN
+		SET relation_text = relation_text + LOAD RelationNormal FROM "Structural/VariablesEffects.txt"
+ELSE 
+		SET relation_text = relation_text + LOAD RelationHigh FROM "Structural/VariablesEffects.txt"
+ENDIF
+
+RETURN relation_text

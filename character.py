@@ -10,6 +10,7 @@ from typing import Dict, List, Any
 # Assuming dsl_engine.py is in a DSL folder within NeuroMita
 from DSL.dsl_engine import DslInterpreter # PROMPTS_ROOT is managed by DslInterpreter
 from DSL.path_resolver import LocalPathResolver
+from DSL.post_dsl_engine import PostDslInterpreter
 from MemorySystem import MemorySystem
 from HistoryManager import HistoryManager
 from utils import clamp, SH # SH for masking keys if needed elsewhere
@@ -93,7 +94,7 @@ class Character:
                 character_base_data_path=self.base_data_path
             )
         self.dsl_interpreter = DslInterpreter(self, path_resolver_instance)
-
+        self.post_dsl_interpreter = PostDslInterpreter(self, path_resolver_instance)  # Use same resolver
         # Set initial dynamic variables
         self.set_variable("SYSTEM_DATETIME", datetime.datetime.now().isoformat(" ", "minutes"))
 
@@ -153,19 +154,33 @@ class Character:
             messages.append({"role": "system", "content": memory_message_content})
         return messages
 
+    # In OpenMita/character.py, class Character
     def process_response_nlp_commands(self, response: str) -> str:
-        """
-        Processes commands embedded in the LLM's response (<p>, memory tags).
-        Subclasses can override to add more specific parsing.
-        """
-        self.set_variable("LongMemoryRememberCount", self.get_variable("LongMemoryRememberCount", 0) + 1)
+        original_response_for_log = response[:200] + "..." if len(response) > 200 else response
+        logger.info(f"[{self.char_id}] Original LLM response: {original_response_for_log}")
 
+        # 1. Run custom Post-Processing DSL
+        try:
+            response = self.post_dsl_interpreter.process(response)
+            processed_response_for_log = response[:200] + "..." if len(response) > 200 else response
+            logger.info(f"[{self.char_id}] Response after Post-DSL: {processed_response_for_log}")
+        except Exception as e:
+            logger.error(f"[{self.char_id}] Error during Post-DSL processing: {e}", exc_info=True)
+            # Decide: return original response or an error indicator? For now, continue with (potentially partially) processed response.
+
+        # 2. Existing hardcoded logic (memory, <p> tags)
+        # These could eventually be migrated to be rules in .postscript files too for full flexibility.
+        # For now, they run *after* the custom Post-DSL.
+        self.set_variable("LongMemoryRememberCount", self.get_variable("LongMemoryRememberCount", 0) + 1)
         response = self.extract_and_process_memory_data(response)
         try:
-            response = self._process_behavior_changes_from_llm(response) # Handles <p> tags
+            response = self._process_behavior_changes_from_llm(response)
         except Exception as e:
-            logger.warning(f"Error processing behavior changes from LLM for {self.char_id}: {e}", exc_info=True)
-        
+            logger.warning(f"Error processing built-in behavior changes from LLM for {self.char_id}: {e}",
+                           exc_info=True)
+
+        final_response_for_log = response[:200] + "..." if len(response) > 200 else response
+        logger.debug(f"[{self.char_id}] Final response after all processing: {final_response_for_log}")
         return response
 
     def _process_behavior_changes_from_llm(self, response: str) -> str:
@@ -262,11 +277,24 @@ class Character:
 
         return re.sub(memory_pattern, memory_processor, response, flags=re.DOTALL).strip()
 
+    # In OpenMita/character.py, class Character
     def reload_character_data(self):
         logger.info(f"[{self.char_id}] Reloading character data from history file.")
-        self.load_history() 
-        self.memory_system.load_memories() 
+        self.load_history()
+        self.memory_system.load_memories()
         self.set_variable("SYSTEM_DATETIME", datetime.datetime.now().isoformat(" ", "minutes"))
+
+        if hasattr(self, 'post_dsl_interpreter') and self.post_dsl_interpreter:
+            self.post_dsl_interpreter._load_rules()  # Ensure _load_rules can be called to refresh
+            logger.info(f"[{self.char_id}] Post-DSL rules reloaded.")
+        else:  # Initialize if it wasn't (e.g. loading an old character state)
+            path_resolver_instance = LocalPathResolver(
+                global_prompts_root=self.prompts_root,
+                character_base_data_path=self.base_data_path
+            )
+            self.post_dsl_interpreter = PostDslInterpreter(self, path_resolver_instance)
+            logger.info(f"[{self.char_id}] Post-DSL interpreter initialized and rules loaded during reload.")
+
         logger.info(f"[{self.char_id}] Character data reloaded.")
 
     #region History
