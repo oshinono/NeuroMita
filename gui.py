@@ -1234,7 +1234,7 @@ class ChatGUI:
             {'label': _('Штраф присутствия', 'Use Presence penalty'),
              'key': 'USE_MODEL_PRESENCE_PENALTY',
              'type': 'checkbutton',
-             'default_checkbutton': True,
+             'default_checkbutton': self.settings.get('USE_MODEL_PRESENCE_PENALTY', True),
              'tooltip': _('Использовать параметр Штраф присутствия', 'Use the Presence penalty parameter')},
             {'label': _('Штраф присутствия', 'Presence penalty'), 'key': 'MODEL_PRESENCE_PENALTY',
              'type': 'entry', 'default': 0.0, 'validation': self.validate_float_minus2_to_2,
@@ -2841,4 +2841,3 @@ class ChatGUI:
         else:
             logger.warning("Метод 'change_voice_language' отсутствует в объекте local_voice.")
     # endregion
-
