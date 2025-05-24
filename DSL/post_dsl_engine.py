@@ -224,6 +224,8 @@ class PostDslInterpreter:
                 parts_after_set = args.split(maxsplit=1)
                 if len(parts_after_set) > 1 and parts_after_set[0].upper() == "LOCAL":
                     is_local = True
+                    if var_name in self._local_vars:
+                        continue
                     args = parts_after_set[1] # Remaining part after "LOCAL"
 
                 var_name, expr = [s.strip() for s in args.split("=", 1)]
