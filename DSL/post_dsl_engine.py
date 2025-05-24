@@ -43,6 +43,8 @@ class PostDslInterpreter:
         self.resolver = resolver
         self.rules: List[PostDslRule] = []
         self.debug_display_config: Dict[str, str] = {}  # { "LabelInUI": "variable_name" }
+        self._local_vars: Dict[str, Any] = {} # New: for local variables within post-rules execution
+        self._declared_local_vars: set[str] = set()
         self._load_rules_and_configs()  # Переименуем или вызовем новый метод
 
     def _parse_dsl_script_text_to_rules_and_config(self, script_text: str) -> Tuple[List[PostDslRule], Dict[str, str]]:
@@ -171,20 +173,20 @@ class PostDslInterpreter:
     def _eval_dsl_expression(self, expr: str, context_vars: Dict[str, Any]) -> Any:
         """
         Evaluates a DSL expression.
-        This should be adapted from the editor's DslInterpreter._eval_expr.
-        It needs access to character variables and the local context_vars (from regex captures).
+        It needs access to character variables, local variables, and context_vars (from regex captures).
+        Priority: context_vars > _local_vars > character.variables
         """
         safe_globals = {
             "__builtins__": {"str": str, "int": int, "float": float, "len": len, "True": True, "False": False,
                              "None": None, "round": round, "abs": abs, "max": max, "min": min},
             "default": lambda var_name, def_val: context_vars.get(var_name,
-                                                                  self.character.variables.get(var_name, def_val))
+                                                                  self._local_vars.get(var_name,
+                                                                                       self.character.variables.get(var_name, def_val)))
         }
 
-        # Merge character variables and context variables for evaluation
-        # Context vars (from regex) should take precedence if names clash
-        eval_scope = self.character.variables.copy()
-        eval_scope.update(context_vars)
+        # Combine all variable scopes for evaluation
+        # Context vars (from regex) should take precedence, then local vars, then character vars
+        eval_scope = {**self.character.variables, **self._local_vars, **context_vars}
 
         try:
             # A simplified eval. The editor's version handles auto-str casting and NameError retries.
@@ -218,12 +220,29 @@ class PostDslInterpreter:
             args = parts[1] if len(parts) > 1 else ""
 
             if command == "SET":
+                is_local = False
+                parts_after_set = args.split(maxsplit=1)
+                if len(parts_after_set) > 1 and parts_after_set[0].upper() == "LOCAL":
+                    is_local = True
+                    args = parts_after_set[1] # Remaining part after "LOCAL"
+
                 var_name, expr = [s.strip() for s in args.split("=", 1)]
                 try:
                     value = self._eval_dsl_expression(expr, context_vars)
-                    self.character.set_variable(var_name, value)
-                    # Update context_vars as well for subsequent actions in the same rule
-                    context_vars[var_name] = value
+                    if is_local:
+                        self._declared_local_vars.add(var_name)
+                        self._local_vars[var_name] = value
+                        # Update context_vars as well for subsequent actions in the same rule
+                        context_vars[var_name] = value # Ensure it's available for current rule's context
+                    else:
+                        if var_name in self._declared_local_vars:
+                            self._local_vars[var_name] = value
+                            # Update context_vars as well for subsequent actions in the same rule
+                            context_vars[var_name] = value # Ensure it's available for current rule's context
+                        else:
+                            self.character.set_variable(var_name, value)
+                            # Update context_vars as well for subsequent actions in the same rule
+                            context_vars[var_name] = value # Ensure it's available for current rule's context
                 except Exception as e:
                     logger.error(
                         f"[{self.character.char_id}] Post-DSL Rule '{rule.name}': Failed to SET '{var_name}': {e}")
@@ -250,6 +269,10 @@ class PostDslInterpreter:
         return processed_segment, True
 
     def process(self, response_text: str) -> str:
+        # Clear local variables at the start of each processing cycle
+        self._local_vars.clear()
+        self._declared_local_vars.clear()
+
         modified_response = response_text
 
         for rule in self.rules:
