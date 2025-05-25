@@ -589,6 +589,9 @@ class ChatGUI:
         self.load_chat_history()
 
     def insert_message(self, role, content):
+        if not isinstance(content, str):
+            return
+
         if role == "user":
             # Вставляем имя пользователя с зеленым цветом, а текст — обычным
             self.chat_window.insert(tk.END, _("Вы: ", "You: "), "Player")
