@@ -1,3 +1,4 @@
+import base64
 import concurrent.futures
 import time
 
@@ -273,7 +274,9 @@ class ChatModel:
         except Exception as e:
             logger.info(f"update_openai_client не сработал {e}")
 
-    def generate_response(self, user_input, system_input=""):
+    def generate_response(self, user_input: str, system_input: str = "", image_data: list[bytes] = None):
+        if image_data is None:
+            image_data = []
 
         self.check_change_current_character()
 
@@ -284,28 +287,36 @@ class ChatModel:
             logger.info("Попытался расширить messages")
             messages.extend(self.infos)
             self.infos.clear()
+        logger.info("Вызов current_character.process_logic.") # Новый лог
         self.current_character.process_logic(messages)
 
+        logger.info("Вызов current_character.add_context.") # Новый лог
         # Добавление информации о времени и пользовательского ввода
-
         messages = self.current_character.add_context(messages)
-        messages = self._add_input(user_input, system_input, messages)
+        logger.info("Вызов _add_input.") # Новый лог
+        messages = self._add_input(user_input, system_input, messages, image_data)
 
+        logger.info("Применение ограничения на количество сообщений.") # Новый лог
         # Ограничение на количество сообщений
+        logger.info("Проверка current_character на GameMaster.") # Новый лог
         if self.current_character == self.GameMaster:
+            logger.info("GameMaster: messages = messages[-8:]") # Новый лог
             messages = messages[-8:]
         else:
+            logger.info("Не GameMaster: messages = messages[-self.memory_limit:]") # Новый лог
             messages = messages[-self.memory_limit:]
 
+        logger.info("Вызов current_character.current_variables.")
         # Обновление текущего настроения
         timed_system_message = self.current_character.current_variables()
 
+        logger.info("Вызов _combine_messages_character.") # Новый лог
         combined_messages, messages = self._combine_messages_character(self.current_character, messages,
                                                                        timed_system_message)
 
+        logger.info("Вызов _generate_chat_response для генерации ответа.")
         # Генерация ответа с использованием клиента
         try:
-
             response, success = self._generate_chat_response(combined_messages)
 
             if not success:
@@ -395,13 +406,35 @@ class ChatModel:
             self.current_character = self.characters[self.current_character_to_change]
             self.current_character_to_change = ""  # Сбрасываем значение
 
-    def _add_input(self, user_input, system_input, messages):
-        """Добавляет то самое последнее сообщение"""
+    def _add_input(self, user_input: str, system_input: str, messages: list, image_data: list[bytes] = None):
+        """Добавляет то самое последнее сообщение, включая изображения."""
+        if image_data is None:
+            image_data = []
 
-        if system_input != "":
-            messages.append({"role": "system", "content": system_input})
-        if user_input != "":
-            messages.append({"role": "user", "content": user_input})
+        content_parts = []
+        if system_input:
+            content_parts.append({"type": "text", "text": system_input})
+        if user_input:
+            content_parts.append({"type": "text", "text": user_input})
+        
+        for img_bytes in image_data:
+            # Предполагаем, что image_data содержит байты PNG
+            content_parts.append({
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/jpeg;base64,{base64.b64encode(img_bytes).decode('utf-8')}" # Изменено на image/jpeg
+                }
+            })
+
+        if content_parts:
+            # Если есть изображения, то content - это список частей
+            # Если только текст, то content - это строка (для совместимости с старыми моделями)
+            if image_data:
+                messages.append({"role": "user", "content": content_parts})
+            elif user_input or system_input: # Если нет изображений, но есть текст
+                # Объединяем текстовые части в одну строку, если нет изображений
+                text_content = " ".join([part["text"] for part in content_parts if part["type"] == "text"])
+                messages.append({"role": "user", "content": text_content})
         return messages
 
     def get_room_name(self, room_id):
@@ -468,10 +501,9 @@ class ChatModel:
             try:
                 # Через реквест
                 if bool(self.gui.settings.get("NM_API_REQ", False)):  #
-
-                    if bool(self.gui.settings.get("GEMINI_CASE", False)):
-                        combined_messages = self._format_messages_for_gemini(combined_messages)
-
+                    # _format_messages_for_gemini теперь вызывается внутри generate_request_gemini
+                    # или его логика интегрирована туда, чтобы избежать двойного форматирования.
+                    # Поэтому здесь его вызов убираем.
                     response = self._execute_with_timeout(
                         self._generate_request_response,
                         args=(combined_messages,),
@@ -562,10 +594,11 @@ class ChatModel:
 
         try:
 
-            logger.info(f"Перед запросом  {len(combined_messages)}")
+            logger.info(f"Перед запросом (OpenAPI/g4f): {len(combined_messages)} сообщений.")
+            logger.debug(f"Отправляемые сообщения: {combined_messages}") # Добавляем логирование содержимого
 
             if bool(self.gui.settings.get("gpt4free")) or use_gpt4free:
-                logger.info("gpt4free case")
+                logger.info("Используется gpt4free.")
 
                 self.gpt4free_model = self.gui.settings.get("gpt4free_model")
                 self.change_last_message_to_user_for_gemini(self.gpt4free_model, combined_messages)
@@ -573,12 +606,14 @@ class ChatModel:
                 final_params = self.get_final_params(self.gpt4free_model, combined_messages)
                 completion = self.g4fClient.chat.completions.create(**final_params)
             else:
+                logger.info("Используется OpenAI-совместимый API.")
                 self.change_last_message_to_user_for_gemini(self.api_model, combined_messages)
 
-                # Сообщения фильтруются по структуре отдельно, не как простой параметр}
+                # Сообщения фильтруются по структуре отдельно, не как простой параметр
                 final_params = self.get_final_params(self.api_model, combined_messages)
                 completion = self.client.chat.completions.create(**final_params)
-            logger.info(f"after completion{completion}")
+            logger.info(f"Получен объект completion.")
+            logger.debug(f"Completion: {completion}") # Логируем весь объект completion
 
             if completion:
                 if completion.choices:
@@ -667,14 +702,46 @@ class ChatModel:
             logger.error(f"Проблема с префиксами или постфиксами: {e}")
         return response
 
+    def _format_multimodal_content_for_gemini(self, message_content):
+        """Форматирует содержимое сообщения для Gemini API, поддерживая текст и изображения."""
+        parts = []
+        if isinstance(message_content, list):
+            for item in message_content:
+                if item["type"] == "text":
+                    parts.append({"text": item["text"]})
+                elif item["type"] == "image_url":
+                    # Gemini API ожидает base64-кодированные изображения
+                    parts.append({"inline_data": {"mime_type": "image/png", "data": item["image_url"]["url"].split(',')[1]}})
+        else: # Если content - это просто строка (старый формат)
+            parts.append({"text": message_content})
+        return parts
+
     def generate_request_gemini(self, combined_messages):
         params = self.get_params()
         self.clear_endline_sim(params)
+
+        contents = []
+        for msg in combined_messages:
+            role = "model" if msg["role"] == "assistant" else msg["role"]
+            # Если роль "system", преобразуем в "user" с префиксом
+            if role == "system":
+                role = "user"
+                if isinstance(msg["content"], list):
+                    # Если content уже список частей, добавляем системный промт как первую текстовую часть
+                    msg_content = [{"type": "text", "text": "[System Prompt]:"}] + msg["content"]
+                else:
+                    # Если content - строка, добавляем префикс к строке
+                    msg_content = f"[System Prompt]: {msg['content']}"
+            else:
+                msg_content = msg["content"]
+
+            contents.append({
+                "role": role,
+                "parts": self._format_multimodal_content_for_gemini(msg_content)
+            })
+
         data = {
-            "contents": [
-                {"role": "model" if msg["role"] == "assistant" else msg["role"], "parts": [{"text": msg["content"]}]}
-                for msg in combined_messages
-            ],
+            "contents": contents,
             "generationConfig": params
         }
 
@@ -683,7 +750,8 @@ class ChatModel:
             "Authorization": f"Bearer {self.api_key}"
         }
 
-        logger.info("Отправляю запрос к Gemini")
+        logger.info("Отправляю запрос к Gemini.")
+        logger.debug(f"Отправляемые данные (Gemini): {data}") # Добавляем логирование содержимого
         save_combined_messages(data, "Gem2")
         response = requests.post(self.api_url, headers=headers, json=data)
 
@@ -717,7 +785,8 @@ class ChatModel:
             "Authorization": f"Bearer {self.api_key}"
         }
 
-        logger.info("Отправляю запрос к RequestCommon")
+        logger.info("Отправляю запрос к RequestCommon.")
+        logger.debug(f"Отправляемые данные (RequestCommon): {data}") # Добавляем логирование содержимого
         save_combined_messages(data, "RequestCommon")
         response = requests.post(self.api_url, headers=headers, json=data)
 

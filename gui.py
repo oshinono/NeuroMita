@@ -31,6 +31,7 @@ import sys
 
 import sounddevice as sd
 from SpeechRecognition import SpeechRecognition
+from ScreenCapture import ScreenCapture # Импортируем ScreenCapture
 
 import requests
 import importlib
@@ -215,6 +216,11 @@ class ChatGUI:
         self.root.after(150, self.check_text_to_talk_or_send)
 
         self.root.after(500, self.initialize_last_local_model_on_startup)
+
+        self.screen_capture_instance = ScreenCapture()
+        self.screen_capture_thread = None
+        self.screen_capture_running = False
+        self.last_captured_frame = None
 
     def start_asyncio_loop(self):
         """Запускает цикл событий asyncio в отдельном потоке."""
@@ -567,6 +573,8 @@ class ChatGUI:
 
         if os.environ.get("ENABLE_COMMAND_REPLACER_BY_DEFAULT", "0") == "1":
             self.setup_command_replacer_controls(settings_frame)
+
+        self.setup_screen_analysis_controls(settings_frame) # Новая секция для анализа экрана
 
         self.setup_news_control(settings_frame)
         
@@ -1179,8 +1187,24 @@ class ChatGUI:
         ]
 
         self.create_settings_section(parent,
-                                    _("Настройки Command Replacer (БЕТА)", "Command Replacer Settings (BETA)"),
-                                    command_replacer_config)
+                                     _("Настройки Command Replacer (БЕТА)", "Command Replacer Settings (BETA)"),
+                                     command_replacer_config)
+
+    def setup_screen_analysis_controls(self, parent):
+        """Создает секцию настроек для анализа экрана."""
+        screen_analysis_config = [
+            {'label': _('Включить анализ экрана', 'Enable Screen Analysis'), 'key': 'ENABLE_SCREEN_ANALYSIS', 'type': 'checkbutton',
+            'default_checkbutton': False, 'tooltip': _('Включает захват экрана и отправку кадров в модель для анализа.', 'Enables screen capture and sending frames to the model for analysis.')},
+            {'label': _('Интервал захвата (сек)', 'Capture Interval (sec)'), 'key': 'SCREEN_CAPTURE_INTERVAL', 'type': 'entry',
+            'default': 5.0, 'validation': self.validate_float_positive, 'tooltip': _('Интервал между захватом кадров в секундах (минимум 0.1).', 'Interval between frame captures in seconds (minimum 0.1).')},
+            {'label': _('Сжатие (%)', 'Compression (%)'), 'key': 'SCREEN_CAPTURE_QUALITY', 'type': 'entry',
+            'default': 25, 'validation': self.validate_positive_integer, 'tooltip': _('Качество JPEG (0-100).', 'JPEG quality (0-100).')},
+            {'label': _('Кадров в секунду', 'Frames per second'), 'key': 'SCREEN_CAPTURE_FPS', 'type': 'entry',
+            'default': 1, 'validation': self.validate_positive_integer, 'tooltip': _('Количество кадров в секунду (минимум 1).', 'Frames per second (minimum 1).')},
+        ]
+        self.create_settings_section(parent,
+                                     _("Настройки анализа экрана", "Screen Analysis Settings"),
+                                     screen_analysis_config)
 
     def setup_api_controls_new(self, parent):
         # Основные настройки
@@ -1274,6 +1298,14 @@ class ChatGUI:
         try:
             value = float(new_value)
             return -2.0 <= value <= 2.0
+        except ValueError:
+            return False
+
+    def validate_float_positive(self, new_value):
+        if new_value == "": return True
+        try:
+            value = float(new_value)
+            return value > 0
         except ValueError:
             return False
     # endrigion
@@ -1381,24 +1413,40 @@ class ChatGUI:
             self.chat_window.insert(tk.END, f"{MitaName}: ", "Mita")
             self.chat_window.insert(tk.END, f"{response}\n\n")
 
-    def send_message(self, system_input=""):
-        user_input = self.user_entry.get("1.0", "end-1c")
-        if not user_input.strip() and system_input == "":
+    def send_message(self, system_input: str = "", image_data: list[bytes] = None):
+        user_input = self.user_entry.get("1.0", "end-1c").strip() # Убираем пробелы сразу
+        
+        # Если включен анализ экрана, пытаемся получить последний кадр
+        current_image_data = []
+        if self.settings.get("ENABLE_SCREEN_ANALYSIS", False):
+            frame = self.screen_capture_instance.get_latest_frame()
+            if frame:
+                current_image_data.append(frame)
+                logger.info(f"Захвачен кадр для отправки: {len(frame)} байт.")
+            else:
+                logger.info("Анализ экрана включен, но кадр не готов или не изменился.")
+
+        # Объединяем переданные изображения с текущими захваченными
+        all_image_data = (image_data if image_data is not None else []) + current_image_data
+
+        # Отправляем сообщение, если есть пользовательский ввод ИЛИ системный ввод ИЛИ изображения
+        if not user_input and not system_input:
+            logger.info("Нет текста или изображений для отправки.")
             return
 
-        if user_input != "":
+        if user_input: # Вставляем сообщение в чат только если есть пользовательский текст
             self.insert_message("user", user_input)
             self.user_entry.delete("1.0", "end")
 
         # Запускаем асинхронную задачу для генерации ответа
         if self.loop and self.loop.is_running():
-            asyncio.run_coroutine_threadsafe(self.async_send_message(user_input, system_input), self.loop)
+            asyncio.run_coroutine_threadsafe(self.async_send_message(user_input, system_input, all_image_data), self.loop)
 
-    async def async_send_message(self, user_input, system_input=""):
+    async def async_send_message(self, user_input: str, system_input: str = "", image_data: list[bytes] = None):
         try:
             # Ограничиваем выполнение задачи
             response = await asyncio.wait_for(
-                self.loop.run_in_executor(None, lambda: self.model.generate_response(user_input, system_input)),
+                self.loop.run_in_executor(None, lambda: self.model.generate_response(user_input, system_input, image_data)),
                 timeout=25.0  # Тайм-аут в секундах
             )
             self.insert_message("assistant", response)
@@ -1416,6 +1464,21 @@ class ChatGUI:
             # Обработка тайм-аута
             logger.info("Тайм-аут: генерация ответа заняла слишком много времени.")
             #self.insert_message("assistant", "Превышен лимит времени ожидания ответа от нейросети.")
+
+    def start_screen_capture_thread(self):
+        if not self.screen_capture_running:
+            interval = float(self.settings.get("SCREEN_CAPTURE_INTERVAL", 5.0))
+            quality = int(self.settings.get("SCREEN_CAPTURE_QUALITY", 25))
+            fps = int(self.settings.get("SCREEN_CAPTURE_FPS", 1))
+            self.screen_capture_instance.start_capture(interval, quality, fps)
+            self.screen_capture_running = True
+            logger.info(f"Поток захвата экрана запущен с интервалом {interval}, качеством {quality}, {fps} FPS.")
+
+    def stop_screen_capture_thread(self):
+        if self.screen_capture_running:
+            self.screen_capture_instance.stop_capture()
+            self.screen_capture_running = False
+            logger.info("Поток захвата экрана остановлен.")
 
     def clear_history(self):
         self.model.current_character.clear_history()
@@ -1685,6 +1748,20 @@ class ChatGUI:
 
         elif key == "MIC_ACTIVE":
             SpeechRecognition.active = bool(value)
+        
+        elif key == "ENABLE_SCREEN_ANALYSIS":
+            if bool(value):
+                self.start_screen_capture_thread()
+            else:
+                self.stop_screen_capture_thread()
+        elif key == "SCREEN_CAPTURE_INTERVAL":
+            try:
+                interval = float(value)
+                if self.screen_capture_instance and self.screen_capture_instance.is_running():
+                    self.screen_capture_instance.stop_capture()
+                    self.screen_capture_instance.start_capture(interval)
+            except ValueError:
+                pass # Игнорировать, если не число
 
         # logger.info(f"Настройки изменены: {key} = {value}")
     #endregion
@@ -1961,6 +2038,7 @@ class ChatGUI:
         except:
             pass
 
+        self.stop_screen_capture_thread() # Останавливаем захват экрана при закрытии
         self.delete_all_sound_files()
         self.stop_server()
         logger.info("Закрываемся")
