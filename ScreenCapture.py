@@ -70,9 +70,11 @@ class ScreenCapture:
                 time.sleep(self._interval_seconds)
 
     def get_latest_frame(self) -> bytes | None:
-        """Возвращает последний захваченный кадр в формате PNG байтов."""
+        """Возвращает последний захваченный кадр в формате JPEG байтов."""
         frame = self._latest_frame
-        self._latest_frame = None  # Сбрасываем, чтобы получать только новые кадры
+        # Не сбрасываем _latest_frame в None, чтобы последний кадр был доступен,
+        # пока не будет захвачен новый. Это позволит отправлять один и тот же кадр,
+        # если send_message вызывается чаще, чем происходит захват.
         return frame
 
     def is_running(self) -> bool:

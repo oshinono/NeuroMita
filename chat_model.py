@@ -287,18 +287,13 @@ class ChatModel:
             logger.info("Попытался расширить messages")
             messages.extend(self.infos)
             self.infos.clear()
-        logger.info("Вызов current_character.process_logic.") # Новый лог
         self.current_character.process_logic(messages)
 
-        logger.info("Вызов current_character.add_context.") # Новый лог
         # Добавление информации о времени и пользовательского ввода
         messages = self.current_character.add_context(messages)
-        logger.info("Вызов _add_input.") # Новый лог
         messages = self._add_input(user_input, system_input, messages, image_data)
 
-        logger.info("Применение ограничения на количество сообщений.") # Новый лог
         # Ограничение на количество сообщений
-        logger.info("Проверка current_character на GameMaster.") # Новый лог
         if self.current_character == self.GameMaster:
             logger.info("GameMaster: messages = messages[-8:]") # Новый лог
             messages = messages[-8:]
@@ -306,15 +301,12 @@ class ChatModel:
             logger.info("Не GameMaster: messages = messages[-self.memory_limit:]") # Новый лог
             messages = messages[-self.memory_limit:]
 
-        logger.info("Вызов current_character.current_variables.")
         # Обновление текущего настроения
         timed_system_message = self.current_character.current_variables()
 
-        logger.info("Вызов _combine_messages_character.") # Новый лог
         combined_messages, messages = self._combine_messages_character(self.current_character, messages,
                                                                        timed_system_message)
 
-        logger.info("Вызов _generate_chat_response для генерации ответа.")
         # Генерация ответа с использованием клиента
         try:
             response, success = self._generate_chat_response(combined_messages)
@@ -711,7 +703,7 @@ class ChatModel:
                     parts.append({"text": item["text"]})
                 elif item["type"] == "image_url":
                     # Gemini API ожидает base64-кодированные изображения
-                    parts.append({"inline_data": {"mime_type": "image/png", "data": item["image_url"]["url"].split(',')[1]}})
+                    parts.append({"inline_data": {"mime_type": "image/jpeg", "data": item["image_url"]["url"].split(',')[1]}})
         else: # Если content - это просто строка (старый формат)
             parts.append({"text": message_content})
         return parts
