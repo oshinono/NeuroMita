@@ -590,16 +590,27 @@ class ChatGUI:
 
     def insert_message(self, role, content):
         if not isinstance(content, str):
+        processed_content = ""
+        if isinstance(content, list):
+            # Если content - это список, извлекаем только текстовые части
+            for item in content:
+                if isinstance(item, dict) and item.get("type") == "text":
+                    processed_content += item.get("text", "")
+        elif isinstance(content, str):
+            # Если content - это строка, используем ее как есть
+            processed_content = content
+        else:
+            # Если content не является ни списком, ни строкой, игнорируем
             return
 
         if role == "user":
             # Вставляем имя пользователя с зеленым цветом, а текст — обычным
             self.chat_window.insert(tk.END, _("Вы: ", "You: "), "Player")
-            self.chat_window.insert(tk.END, f"{content}\n")
+            self.chat_window.insert(tk.END, f"{processed_content}\n")
         elif role == "assistant":
             # Вставляем имя Миты с синим цветом, а текст — обычным
             self.chat_window.insert(tk.END, f"{self.model.current_character.name}: ", "Mita")
-            self.chat_window.insert(tk.END, f"{content}\n\n")
+            self.chat_window.insert(tk.END, f"{processed_content}\n\n")
 
     # region секция g4f
     def _check_and_perform_pending_update(self):
