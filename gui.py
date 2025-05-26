@@ -1204,6 +1204,8 @@ class ChatGUI:
             'default': 25, 'validation': self.validate_positive_integer, 'tooltip': _('Качество JPEG (0-100).', 'JPEG quality (0-100).')},
             {'label': _('Кадров в секунду', 'Frames per second'), 'key': 'SCREEN_CAPTURE_FPS', 'type': 'entry',
             'default': 1, 'validation': self.validate_positive_integer, 'tooltip': _('Количество кадров в секунду (минимум 1).', 'Frames per second (minimum 1).')},
+            {'label': _('Кол-во кадров в истории', 'Number of frames in history'), 'key': 'SCREEN_CAPTURE_HISTORY_LIMIT', 'type': 'entry',
+            'default': 1, 'validation': self.validate_positive_integer, 'tooltip': _('Максимальное количество последних кадров для отправки в модель (минимум 1).', 'Maximum number of recent frames to send to the model (minimum 1).')},
         ]
         self.create_settings_section(parent,
                                      _("Настройки анализа экрана", "Screen Analysis Settings"),
@@ -1419,15 +1421,16 @@ class ChatGUI:
     def send_message(self, system_input: str = "", image_data: list[bytes] = None):
         user_input = self.user_entry.get("1.0", "end-1c").strip() # Убираем пробелы сразу
         
-        # Если включен анализ экрана, пытаемся получить последний кадр
+        # Если включен анализ экрана, пытаемся получить последние кадры
         current_image_data = []
         if self.settings.get("ENABLE_SCREEN_ANALYSIS", False):
-            frame = self.screen_capture_instance.get_latest_frame()
-            if frame:
-                current_image_data.append(frame)
-                logger.info(f"Захвачен кадр для отправки: {len(frame)} байт.")
+            history_limit = int(self.settings.get("SCREEN_CAPTURE_HISTORY_LIMIT", 1))
+            frames = self.screen_capture_instance.get_recent_frames(history_limit)
+            if frames:
+                current_image_data.extend(frames)
+                logger.info(f"Захвачено {len(frames)} кадров для отправки.")
             else:
-                logger.info("Анализ экрана включен, но кадр не готов или не изменился.")
+                logger.info("Анализ экрана включен, но кадры не готовы или история пуста.")
 
         # Объединяем переданные изображения с текущими захваченными
         all_image_data = (image_data if image_data is not None else []) + current_image_data
@@ -1473,9 +1476,10 @@ class ChatGUI:
             interval = float(self.settings.get("SCREEN_CAPTURE_INTERVAL", 5.0))
             quality = int(self.settings.get("SCREEN_CAPTURE_QUALITY", 25))
             fps = int(self.settings.get("SCREEN_CAPTURE_FPS", 1))
-            self.screen_capture_instance.start_capture(interval, quality, fps)
+            max_history_frames = int(self.settings.get("SCREEN_CAPTURE_HISTORY_LIMIT", 1))
+            self.screen_capture_instance.start_capture(interval, quality, fps, max_history_frames)
             self.screen_capture_running = True
-            logger.info(f"Поток захвата экрана запущен с интервалом {interval}, качеством {quality}, {fps} FPS.")
+            logger.info(f"Поток захвата экрана запущен с интервалом {interval}, качеством {quality}, {fps} FPS, историей {max_history_frames} кадров.")
 
     def stop_screen_capture_thread(self):
         if self.screen_capture_running:
