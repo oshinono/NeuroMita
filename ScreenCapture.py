@@ -18,7 +18,7 @@ class ScreenCapture:
         self._interval_seconds = 1.0  # По умолчанию 1 кадр в секунду
         self._sct = None  # Инициализируем здесь как None, чтобы создавать в потоке
 
-    def start_capture(self, interval_seconds: float = 1.0, quality: int = 25, fps: int = 1, max_history_frames: int = 1):
+    def start_capture(self, interval_seconds: float = 1.0, quality: int = 25, fps: int = 1, max_history_frames: int = 1, capture_width: int = 1024, capture_height: int = 768):
         if self._running:
             logger.warning("Захват экрана уже запущен.")
             return
@@ -28,11 +28,13 @@ class ScreenCapture:
         self._interval_seconds = 1.0 / self._fps
         self._interval_seconds = max(0.1, self._interval_seconds)  # Минимальный интервал 0.1 секунды
         self._max_history_frames = max(1, max_history_frames) # Минимум 1 кадр в истории
+        self._capture_width = max(1, capture_width) # Минимальная ширина 1
+        self._capture_height = max(1, capture_height) # Минимальная высота 1
 
         self._running = True
         self._thread = threading.Thread(target=self._capture_loop, daemon=True)
         self._thread.start()
-        logger.info(f"Захват экрана запущен с качеством {self._quality}, {self._fps} FPS (интервал {self._interval_seconds} секунд).")
+        logger.info(f"Захват экрана запущен с качеством {self._quality}, {self._fps} FPS (интервал {self._interval_seconds} секунд), разрешением {self._capture_width}x{self._capture_height}.")
 
     def stop_capture(self):
         if not self._running:
@@ -56,8 +58,8 @@ class ScreenCapture:
                     # Конвертация в PIL Image
                     img = Image.frombytes("RGB", sct_img.size, sct_img.rgb)
 
-                    # Сжатие изображения (уменьшение размера)
-                    max_size = (1024, 768)  # Максимальное разрешение, можно сделать настраиваемым
+                    # Сжатие изображения (уменьшение размера) до заданного разрешения
+                    max_size = (self._capture_width, self._capture_height)
                     img.thumbnail(max_size, Image.Resampling.LANCZOS)  # Использование LANCZOS для лучшего качества
 
                     # Сохраняем в байтовый буфер в формате JPEG для лучшего сжатия
