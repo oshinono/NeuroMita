@@ -74,7 +74,15 @@ class ChatModel:
         self.max_response_tokens = int(
             self.gui.settings.get("MODEL_MAX_RESPONSE_TOKENS", 3200))  # Получаем из настроек, если есть, иначе дефолт
         self.temperature = float(self.gui.settings.get("MODEL_TEMPERATURE", 0.5))
-        self.presence_penalty = float(self.gui.settings.get("MODEL_PRESENCE_PENALTY", 0.0))  #
+        self.presence_penalty = float(self.gui.settings.get("MODEL_PRESENCE_PENALTY", 0.0))
+        self.top_k = int(self.gui.settings.get("MODEL_TOP_K", 0))
+        self.top_p = float(self.gui.settings.get("MODEL_TOP_P", 1.0))
+        self.thinking_budget = float(self.gui.settings.get("MODEL_THINKING_BUDGET", 0.0))
+        self.presence_penalty = float(self.gui.settings.get("MODEL_PRESENCE_PENALTY", 0.0))
+        self.frequency_penalty = float(self.gui.settings.get("MODEL_FREQUENCY_PENALTY", 0.0))
+        self.log_probability = float(self.gui.settings.get("MODEL_LOG_PROBABILITY", 0.0))
+
+
 
         """ Очень спорно уже """
         self.cost_input_per_1000 = 0.0432
@@ -828,11 +836,38 @@ class ChatModel:
             # Добавьте другие провайдеры
 
         # Штраф за присутствие - названия могут различаться, и параметр может отсутствовать у некоторых провайдеров
-        if bool(self.gui.settings.get("USE_MODEL_PRESENCE_PENALTY")):
+        if bool(self.gui.settings.get("USE_MODEL_PRESENCE_PENALTY")) and self.presence_penalty is not None:
             if provider_key == 'openai' or provider_key == 'deepseek':
                 params['presence_penalty'] = self.presence_penalty
             elif provider_key == 'gemini':
                 params['presencePenalty'] = self.presence_penalty
+
+        if bool(self.gui.settings.get("USE_MODEL_FREQUENCY_PENALTY")) and self.frequency_penalty is not None:
+            if provider_key == 'openai' or provider_key == 'deepseek':
+                params['frequency_penalty'] = self.frequency_penalty
+            elif provider_key == 'gemini':
+                params['frequencyPenalty'] = self.frequency_penalty
+
+        if bool(self.gui.settings.get("USE_MODEL_LOG_PROBABILITY")) and self.log_probability is not None:
+            if provider_key == 'openai' or provider_key == 'deepseek':
+                params['logprobs'] = self.log_probability # OpenAI/DeepSeek
+            # Gemini не имеет прямого аналога logprobs в том же виде
+
+        # Добавляем top_k, top_p и thought_process, если они заданы
+        if bool(self.gui.settings.get("USE_MODEL_TOP_K")) and self.top_k > 0:
+            if provider_key == 'openai' or provider_key == 'deepseek' or provider_key == 'anthropic':
+                params['top_k'] = self.top_k
+            elif provider_key == 'gemini':
+                params['topK'] = self.top_k
+
+        if bool(self.gui.settings.get("USE_MODEL_TOP_P")):
+            if provider_key == 'openai' or provider_key == 'deepseek' or provider_key == 'anthropic':
+                params['top_p'] = self.top_p
+            elif provider_key == 'gemini':
+                params['topP'] = self.top_p
+
+        if bool(self.gui.settings.get("USE_MODEL_THINKING_BUDGET")):
+            params['thinking_budget'] = self.thinking_budget
             # Anthropic, например, не имеет прямого аналога этого параметра в том же виде.
             # Поэтому мы просто не добавляем его для Anthropic.
 

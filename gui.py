@@ -1274,16 +1274,61 @@ class ChatGUI:
              'type': 'entry', 'default': 0.5, 'validation': self.validate_float_0_to_2,
              'tooltip': _('Креативность ответа (0.0 = строго, 2.0 = очень творчески)',
                           'Creativity of response (0.0 = strict, 2.0 = very creative)')},
+    
+            {'label': _('Использовать Top-K', 'Use Top-K'), 'key': 'USE_MODEL_TOP_K',
+             'type': 'checkbutton', 'default_checkbutton': self.settings.get('USE_MODEL_TOP_K', True),
+             'tooltip': _('Включает/выключает параметр Top-K', 'Enables/disables Top-K parameter')},
+            {'label': _('Top-K', 'Top-K'), 'key': 'MODEL_TOP_K',
+             'type': 'entry', 'default': 0, 'validation': self.validate_positive_integer_or_zero, 'width': 30,
+             'tooltip': _('Ограничивает выбор токенов K наиболее вероятными (0 = отключено)',
+                          'Limits token selection to K most likely (0 = disabled)')},
+
+            {'label': _('Использовать Top-P', 'Use Top-P'), 'key': 'USE_MODEL_TOP_P',
+             'type': 'checkbutton', 'default_checkbutton': self.settings.get('USE_MODEL_TOP_P', True),
+             'tooltip': _('Включает/выключает параметр Top-P', 'Enables/disables Top-P parameter')},
+            {'label': _('Top-P', 'Top-P'), 'key': 'MODEL_TOP_P',
+             'type': 'entry', 'default': 1.0, 'validation': self.validate_float_0_to_1, 'width': 30,
+             'tooltip': _('Ограничивает выбор токенов по кумулятивной вероятности (0.0-1.0)',
+                          'Limits token selection by cumulative probability (0.0-1.0)')},
+
+
+            {'label': _('Использовать бюджет размышлений', 'Use thinking budget'), 'key': 'USE_MODEL_THINKING_BUDGET',
+             'type': 'checkbutton', 'default_checkbutton': self.settings.get('USE_MODEL_THINKING_BUDGET', False),
+             'tooltip': _('Включает/выключает параметр размышлений', 'Enables/disables Thought parameter')},
+            {'label': _('Бюджет размышлений', 'Thinking budget'), 'key': 'MODEL_THINKING_BUDGET',
+             'type': 'entry', 'default': 0.0, 'validation': self.validate_float_minus2_to_2, 'width': 30,
+             'tooltip': _('Параметр, влияющий на глубину "размышлений" модели (зависит от модели)',
+                          'Parameter influencing the depth of model "thoughts" (model-dependent)')},
 
             {'label': _('Штраф присутствия', 'Use Presence penalty'),
              'key': 'USE_MODEL_PRESENCE_PENALTY',
              'type': 'checkbutton',
-             'default_checkbutton': self.settings.get('USE_MODEL_PRESENCE_PENALTY', True),
+             'default_checkbutton': self.settings.get('USE_MODEL_PRESENCE_PENALTY', False),
              'tooltip': _('Использовать параметр Штраф присутствия', 'Use the Presence penalty parameter')},
             {'label': _('Штраф присутствия', 'Presence penalty'), 'key': 'MODEL_PRESENCE_PENALTY',
              'type': 'entry', 'default': 0.0, 'validation': self.validate_float_minus2_to_2,
              'tooltip': _('Штраф за использование новых токенов (-2.0 = поощрять новые, 2.0 = сильно штрафовать)',
                           'Penalty for using new tokens (-2.0 = encourage new, 2.0 = strongly penalize)')},
+
+            {'label': _('Использовать Штраф частоты', 'Use Frequency penalty'),
+             'key': 'USE_MODEL_FREQUENCY_PENALTY',
+             'type': 'checkbutton',
+             'default_checkbutton': self.settings.get('USE_MODEL_FREQUENCY_PENALTY', False),
+             'tooltip': _('Использовать параметр Штраф частоты', 'Use the Frequency penalty parameter')},
+            {'label': _('Штраф частоты', 'Frequency penalty'), 'key': 'MODEL_FREQUENCY_PENALTY',
+             'type': 'entry', 'default': 0.0, 'validation': self.validate_float_minus2_to_2,
+             'tooltip': _('Штраф за частоту использования токенов (-2.0 = поощрять повторение, 2.0 = сильно штрафовать)',
+                          'Penalty for the frequency of token usage (-2.0 = encourage repetition, 2.0 = strongly penalize)')},
+
+            {'label': _('Использовать Лог вероятности', 'Use Log probability'),
+             'key': 'USE_MODEL_LOG_PROBABILITY',
+             'type': 'checkbutton',
+             'default_checkbutton': self.settings.get('USE_MODEL_LOG_PROBABILITY', False),
+             'tooltip': _('Использовать параметр Лог вероятности', 'Use the Log probability parameter')},
+            {'label': _('Лог вероятности', 'Log probability'), 'key': 'MODEL_LOG_PROBABILITY',
+             'type': 'entry', 'default': 0.0, 'validation': self.validate_float_minus2_to_2,
+             'tooltip': _('Параметр, влияющий на логарифмическую вероятность выбора токенов (-2.0 = поощрять, 2.0 = штрафовать)',
+                          'Parameter influencing the logarithmic probability of token selection (-2.0 = encourage, 2.0 = penalize)')},
 
         ]
 
@@ -1302,6 +1347,22 @@ class ChatGUI:
         try:
             value = int(new_value)
             return value > 0
+        except ValueError:
+            return False
+
+    def validate_positive_integer_or_zero(self, new_value):
+        if new_value == "": return True
+        try:
+            value = int(new_value)
+            return value >= 0
+        except ValueError:
+            return False
+
+    def validate_float_0_to_1(self, new_value):
+        if new_value == "": return True
+        try:
+            value = float(new_value)
+            return 0.0 <= value <= 1.0
         except ValueError:
             return False
 
@@ -1746,21 +1807,25 @@ class ChatGUI:
             self.model.makeRequest = bool(value)
         elif key == "gpt4free_model":
             self.model.gpt4free_model = value.strip()
+
+
         elif key == "MODEL_MAX_RESPONSE_TOKENS":
-            try:
-                self.model.max_response_tokens = int(value)
-            except ValueError:
-                pass  # Игнорировать, если не число
+            self.model.max_response_tokens = int(value)
         elif key == "MODEL_TEMPERATURE":
-            try:
-                self.model.temperature = float(value)
-            except ValueError:
-                pass  # Игнорировать, если не число
+            self.model.temperature = float(value)
         elif key == "MODEL_PRESENCE_PENALTY":
-            try:
-                self.model.presence_penalty = float(value)
-            except ValueError:
-                pass  # Игнорировать, если не число
+            self.model.presence_penalty = float(value)
+        elif key == "MODEL_FREQUENCY_PENALTY":
+            self.model.frequency_penalty = float(value)
+        elif key == "MODEL_LOG_PROBABILITY":
+            self.model.log_probability = float(value)
+        elif key == "MODEL_TOP_K":
+            self.model.top_k = int(value)
+        elif key == "MODEL_TOP_P":
+            self.model.top_p = float(value)
+        elif key == "MODEL_THOUGHT_PROCESS":
+            self.model.thinking_budget = float(value)
+
 
 
         elif key == "MODEL_MESSAGE_LIMIT":
