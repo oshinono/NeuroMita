@@ -3,7 +3,7 @@ import concurrent.futures
 import time
 
 import requests
-import tiktoken
+#import tiktoken
 from openai import OpenAI
 #from huggingface_hub import HfApi
 #from mistralai import Mistral as MistralClient
@@ -64,8 +64,8 @@ class ChatModel:
             logger.info("Со старта не получилось запустить OpenAi client")
 
         try:
-            self.tokenizer = tiktoken.encoding_for_model("gpt-4o-mini")
-            self.hasTokenizer = True
+          #  self.tokenizer = tiktoken.encoding_for_model("gpt-4o-mini")
+            self.hasTokenizer = False
         except:
             logger.info("Тиктокен не сработал( Ну и пофиг, на билдах он никогда и не работал")
             self.hasTokenizer = False
@@ -1031,6 +1031,8 @@ class ChatModel:
         return token_count, cost
 
     def count_tokens(self, messages):
+        return 0
+
         return sum(len(self.tokenizer.encode(msg["content"])) for msg in messages if
                    isinstance(msg, dict) and "content" in msg)
 
