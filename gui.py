@@ -589,8 +589,8 @@ class ChatGUI:
         self.load_chat_history()
 
     def insert_message(self, role, content):
-        if not isinstance(content, str):
         processed_content = ""
+           
         if isinstance(content, list):
             # Если content - это список, извлекаем только текстовые части
             for item in content:
