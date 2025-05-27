@@ -1504,7 +1504,7 @@ class ChatGUI:
             frames = self.screen_capture_instance.get_recent_frames(history_limit)
             if frames:
                 current_image_data.extend(frames)
-                logger.info(f"Захвачено {len(frames)} кадров для отправки.")
+                #logger.info(f"Захвачено {len(frames)} кадров для отправки.")
             else:
                 logger.info("Анализ экрана включен, но кадры не готовы или история пуста.")
 
@@ -1513,7 +1513,7 @@ class ChatGUI:
 
         # Отправляем сообщение, если есть пользовательский ввод ИЛИ системный ввод ИЛИ изображения
         if not user_input and not system_input:
-            logger.info("Нет текста или изображений для отправки.")
+            #logger.info("Нет текста или изображений для отправки.")
             return
 
         if user_input: # Вставляем сообщение в чат только если есть пользовательский текст
