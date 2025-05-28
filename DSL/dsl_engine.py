@@ -508,14 +508,30 @@ class DslInterpreter:
                         if "=" not in args: raise DslError("SET requires '='", resolved_script_id, num, raw)
 
                         is_local = False
+                        var = "" # Initialize var
+                        expr = "" # Initialize expr
+
                         parts_after_set = args.split(maxsplit=1)
                         if len(parts_after_set) > 1 and parts_after_set[0].upper() == "LOCAL":
                             is_local = True
-                            if var in self._local_vars:
-                                continue
-                            args = parts_after_set[1] # Remaining part after "LOCAL"
+                            remaining_args = parts_after_set[1]
+                            if "=" in remaining_args:
+                                var, expr = [s.strip() for s in remaining_args.split("=", 1)]
+                            else:
+                                dsl_execution_logger.error(f"Malformed SET LOCAL command: '{raw}'. Missing '='.")
+                                raise DslError("Malformed SET LOCAL command. Missing '='.", resolved_script_id, num, raw)
 
-                        var, expr = [s.strip() for s in args.split("=", 1)]
+                            if var in self._local_vars:
+                                dsl_execution_logger.debug(f"Skipping re-declaration of existing LOCAL variable '{var}' ({os.path.basename(rel_script_path)}:{num})")
+                                continue # Skip if already declared as local
+                        else:
+                            # Not a LOCAL declaration, parse var and expr directly from args
+                            if "=" in args:
+                                var, expr = [s.strip() for s in args.split("=", 1)]
+                            else:
+                                dsl_execution_logger.error(f"Malformed SET command: '{raw}'. Missing '='.")
+                                raise DslError("Malformed SET command. Missing '='.", resolved_script_id, num, raw)
+
                         expr = self._expand_inline_loads(expr, script_path_for_error=resolved_script_id, line_num=num, line_content=raw)
                         value = self._eval_expr(expr, resolved_script_id, num, raw)
 

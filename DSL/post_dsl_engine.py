@@ -221,15 +221,36 @@ class PostDslInterpreter:
 
             if command == "SET":
                 is_local = False
+                var_name = "" # Initialize var_name
                 parts_after_set = args.split(maxsplit=1)
                 if len(parts_after_set) > 1 and parts_after_set[0].upper() == "LOCAL":
                     is_local = True
-                    if var_name in self._local_vars:
-                        continue
-                    args = parts_after_set[1] # Remaining part after "LOCAL"
+                    # The var_name is part of the 'args' after 'LOCAL'
+                    # So, we need to parse it from the remaining 'args'
+                    remaining_args = parts_after_set[1]
+                    if "=" in remaining_args:
+                        var_name = remaining_args.split("=", 1)[0].strip()
+                    else:
+                        # Handle cases where 'SET LOCAL var_name' might be malformed without '='
+                        logger.error(f"[{self.character.char_id}] Post-DSL Rule '{rule.name}': Malformed SET LOCAL command: '{line}'. Missing '='.")
+                        continue # Skip this action
 
-                var_name, expr = [s.strip() for s in args.split("=", 1)]
+                    if var_name in self._local_vars:
+                        continue # If already declared as local, skip re-declaration
+                    args = remaining_args # Remaining part after "LOCAL"
+
+                # This line should now always have var_name defined, either from 'LOCAL' or direct 'SET'
+                # If not 'LOCAL', var_name will be parsed here
+                if not is_local: # Only parse if not already parsed by 'LOCAL'
+                    if "=" in args:
+                        var_name = args.split("=", 1)[0].strip()
+                    else:
+                        logger.error(f"[{self.character.char_id}] Post-DSL Rule '{rule.name}': Malformed SET command: '{line}'. Missing '='.")
+                        continue # Skip this action
+
                 try:
+                    # Ensure expr is correctly extracted after var_name
+                    expr = args.split("=", 1)[1].strip()
                     value = self._eval_dsl_expression(expr, context_vars)
                     if is_local:
                         self._declared_local_vars.add(var_name)
