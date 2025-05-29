@@ -36,6 +36,7 @@ class SpeechRecognition:
     microphone_index = 0
     active = True
     _recognizer_type = "google"  # 'google' или 'vosk'
+    vosk_model = "vosk-model-ru-0.10" #vosk-model-small-ru
 
     SAMPLE_RATE = 44000
     CHUNK_SIZE = 512
@@ -59,6 +60,7 @@ class SpeechRecognition:
             logger.info(f"Тип распознавателя установлен на: {recognizer_type}")
         else:
             logger.warning(f"Неизвестный тип распознавателя: {recognizer_type}. Используется 'google'.")
+
 
     @staticmethod
     def receive_text() -> str:
@@ -100,7 +102,7 @@ class SpeechRecognition:
             async with httpx.AsyncClient() as client:
                 # Отправка аудио на Vosk API
                 response = await client.post(
-                    "http://127.0.0.1:8000/vtt/transcribe", # Предполагаем, что сервер Vosk запущен локально
+                    "http://127.0.0.1:8000/vtt/transcribe",  # Предполагаем, что сервер Vosk запущен локально
                     files={"audio_file": ("audio.wav", audio_bytes, "audio/wav")}
                 )
                 response.raise_for_status()  # Вызовет исключение для статусов 4xx/5xx
@@ -209,7 +211,7 @@ class SpeechRecognition:
                         logger.error(f"Ошибка при распознавании Google: {e}")
                         break
         elif SpeechRecognition._recognizer_type == "vosk":
-            logger.info("Скажите что-нибудь (Vosk)...")
+            logger.info(f"Скажите что-нибудь (Vosk)... Модель: {SpeechRecognition.vosk_model}")
             # Для Vosk мы будем использовать sounddevice для непрерывного захвата
             # и отправлять данные в Vosk API.
             # Внедряем VAD (Voice Activity Detection) для определения конца речи.

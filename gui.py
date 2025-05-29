@@ -971,8 +971,7 @@ class ChatGUI:
                 {'label': _('Канал/Сервис', "Channel/Service"), 'key': 'AUDIO_BOT', 'type': 'combobox',
                  'options': ["@silero_voice_bot", "@CrazyMitaAIbot"], 'default': "@silero_voice_bot",
                  'tooltip': _("Выберите бота", "Select bot")},
-                {'label': _('Макс. ожидание (сек)', 'Max wait (sec)'), 'key': 'SILERO_TIME', 'type': 'entry', 'default': 12, 'validation': self.validate_number},
-                {'label': _('Макс. ожидание (сек)', 'Max wait (sec)'), 'key': 'SILERO_TIME', 'type': 'entry', 'default': 12},
+                {'label': _('Макс. ожидание (сек)', 'Max wait (sec)'), 'key': 'SILERO_TIME', 'type': 'entry', 'default': 12, 'validation': self.validate_number_0_60},
                 {'label': _('Настройки Telegram API', 'Telegram API Settings'), 'type': 'text'},
                  {'label': _('Будет скрыто после перезапуска','Will be hidden after restart')},
                 {'label': _('Telegram ID'), 'key': 'NM_TELEGRAM_API_ID', 'type': 'entry', 'default': "", 'hide': bool(self.settings.get("HIDE_PRIVATE"))},
@@ -1539,7 +1538,7 @@ class ChatGUI:
                 'type': 'combobox',
                 'key': 'MIC_DEVICE',
                 'options': self.get_microphone_list(),
-                'default': '',
+                'default': self.get_microphone_list()[0] if self.get_microphone_list() else "",
                 'command': self.on_mic_selected,
                 'widget_attrs': {
                     'width': 30
@@ -1552,7 +1551,22 @@ class ChatGUI:
                 'options': ["google", "vosk"],
                 'default': "google",
                 'command': lambda value: SpeechRecognition.set_recognizer_type(value),
-                'tooltip': _("Выберите движок распознавания речи: Google или Vosk.", "Select speech recognition engine: Google or Vosk.")
+                'tooltip': _("Выберите движок распознавания речи: Google или Vosk.", "Select speech recognition engine: Google or Vosk."),
+                'command': self.update_vosk_model_visibility
+            },
+            {
+                'label': _("Модель Vosk", "Vosk Model"),
+                'type': 'combobox',
+                'key': 'VOSK_MODEL',
+                'options': ["vosk-model-ru-0.10"],
+                'default': "vosk-model-ru-0.10",
+                'tooltip': _("Выберите модель Vosk.", "Select Vosk model."),
+                'widget_attrs': {
+                    'width': 30
+                },
+                'hide': True,
+                'condition_key': 'RECOGNIZER_TYPE',
+                'condition_value': 'vosk'
             },
             {
                 'label': _("Порог тишины (VAD)", "Silence Threshold (VAD)"),
@@ -1616,6 +1630,8 @@ class ChatGUI:
                     elif isinstance(child, tk.Checkbutton):
                         if 'MIC_ACTIVE' in str(widget):
                             self.mic_active_check = child
+                    elif isinstance(child, ttk.Combobox) and 'VOSK_MODEL' in str(widget):
+                        self.vosk_model_combobox = child
 
     def get_microphone_list(self):
         try:
@@ -1629,6 +1645,26 @@ class ChatGUI:
         except Exception as e:
             logger.info(f"Ошибка получения списка микрофонов: {e}")
             return []
+
+    def update_vosk_model_visibility(self, value):
+        """Показывает/скрывает настройки Vosk в зависимости от выбранного типа."""
+        show_vosk = value == "vosk"
+        for widget in self.mic_section.content_frame.winfo_children():
+            for child in widget.winfo_children():
+                if hasattr(child, 'setting_key') and child.setting_key == 'VOSK_MODEL':
+                    if show_vosk:
+                        widget.pack(fill=tk.X, pady=2)
+                    else:
+                        widget.pack_forget()
+
+    def on_mic_selected(self, event):
+        selection = self.mic_combobox.get()
+        if selection:
+            self.selected_microphone = selection.split(" (")[0]
+            device_id = int(selection.split(" (")[-1].replace(")", ""))
+            self.device_id = device_id
+            logger.info(f"Выбран микрофон: {self.selected_microphone} (ID: {device_id})")
+            self.save_mic_settings(device_id)
 
     def update_mic_list(self):
         self.mic_combobox['values'] = self.get_microphone_list()
@@ -1740,6 +1776,9 @@ class ChatGUI:
             SpeechRecognition.active = bool(value)
         elif key == "RECOGNIZER_TYPE":
             SpeechRecognition.set_recognizer_type(value)
+            self.update_vosk_model_visibility(value)
+        elif key == "VOSK_MODEL":
+            SpeechRecognition.vosk_model = value
         elif key == "SILENCE_THRESHOLD":
             SpeechRecognition.SILENCE_THRESHOLD = float(value)
         elif key == "SILENCE_DURATION":
