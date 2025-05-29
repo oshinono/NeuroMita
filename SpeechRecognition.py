@@ -120,7 +120,7 @@ class SpeechRecognition:
                     logger.warning("Vosk не распознал текст.")
                     return None
         except httpx.RequestError as e:
-            logger.error(f"Ошибка запроса к Vosk API: {e}")
+            logger.error(f"Ошибка запроса к Vosk API: {repr(e)}") # Используем repr(e) для более подробной информации
             return None
         except json.JSONDecodeError:
             logger.error("Ошибка декодирования JSON ответа от Vosk API.")
