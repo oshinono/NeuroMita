@@ -167,49 +167,6 @@ class SpeechRecognition:
                     except Exception as e:
                         logger.error(f"Ошибка при распознавании Google: {e}")
                         break
-    @staticmethod
-    async def live_recognition() -> None:
-        # Этот метод будет работать по-разному в зависимости от выбранного распознавателя.
-        # Для Google будет использоваться speech_recognition.Microphone.
-        # Для Vosk будет использоваться sounddevice для прямого захвата и отправки в Vosk API.
-
-        if SpeechRecognition._recognizer_type == "google":
-            recognizer = sr.Recognizer()
-            with sr.Microphone(device_index=SpeechRecognition.microphone_index, sample_rate=SpeechRecognition.SAMPLE_RATE,
-                               chunk_size=SpeechRecognition.CHUNK_SIZE) as source:
-                logger.info(
-                    f"Используется микрофон: {sr.Microphone.list_microphone_names()[SpeechRecognition.microphone_index]}")
-                recognizer.adjust_for_ambient_noise(source)
-                logger.info("Скажите что-нибудь (Google)...")
-
-                while SpeechRecognition.active:
-                    try:
-                        audio = await asyncio.get_event_loop().run_in_executor(
-                            None,
-                            lambda: recognizer.listen(source, timeout=5)
-                        )
-
-                        text = await asyncio.get_event_loop().run_in_executor(
-                            None,
-                            lambda: recognizer.recognize_google(audio, language="ru-RU")
-                        )
-                        if not text:
-                            text = await asyncio.get_event_loop().run_in_executor(
-                                None,
-                                lambda: recognizer.recognize_google(audio, language="en-EN")
-                            )
-
-                        if text:
-                            await SpeechRecognition.handle_voice_message(text)
-
-                    except sr.WaitTimeoutError:
-                        if SpeechRecognition.TIMEOUT_MESSAGE:
-                            ...
-                    except sr.UnknownValueError:
-                        ...
-                    except Exception as e:
-                        logger.error(f"Ошибка при распознавании Google: {e}")
-                        break
         elif SpeechRecognition._recognizer_type == "vosk":
             logger.info(f"Скажите что-нибудь (Vosk)... Модель: {SpeechRecognition.vosk_model}")
             # Для Vosk мы будем использовать sounddevice для непрерывного захвата
@@ -240,7 +197,7 @@ class SpeechRecognition:
                     if vosk_live_audio_buffer:
                         audio_data_to_process = np.concatenate(vosk_live_audio_buffer)
                         vosk_live_audio_buffer.clear()
-                        asyncio.create_task(SpeechRecognition.recognize_vosk(audio_data_to_process))
+                        await asyncio.create_task(SpeechRecognition.recognize_vosk(audio_data_to_process))
                         await asyncio.sleep(SpeechRecognition.VOSK_PROCESS_INTERVAL)  # Добавлена задержка
                 elif is_vosk_recording: # Продолжаем запись, если звук ниже порога, но тишина еще не достигла SILENCE_DURATION
                     vosk_live_audio_buffer.append(indata.copy())

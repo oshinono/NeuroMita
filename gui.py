@@ -1941,7 +1941,17 @@ class ChatGUI:
             else:
                 logger.info(f"Настройка захвата экрана '{key}' изменена на '{value}'. Поток захвата не активен, изменения будут применены при следующем запуске.")
         elif key == "RECOGNIZER_TYPE":
+            # Останавливаем текущее распознавание
+            SpeechRecognition.active = False
+            # Даем время на завершение текущего потока
+            time.sleep(0.1) # Небольшая задержка
+
+            # Устанавливаем новый тип распознавателя
             SpeechRecognition.set_recognizer_type(value)
+
+            # Перезапускаем распознавание с новым типом
+            SpeechRecognition.active = True # Активируем снова
+            SpeechRecognition.speach_recognition_start(self.device_id, self.loop)
             self.update_vosk_model_visibility(value)
         elif key == "VOSK_MODEL":
             SpeechRecognition.vosk_model = value
