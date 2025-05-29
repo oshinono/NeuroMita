@@ -140,7 +140,7 @@ class ChatGUI:
 
         try:
             self.pip_installer = PipInstaller(
-                script_path="libs\python\python.exe",
+                script_path=r"libs\python\python.exe",
                 libs_path="Lib",
                 update_log=logger.info
             )
@@ -1537,6 +1537,15 @@ class ChatGUI:
                 }
             },
             {
+                'label': _("Тип распознавания", "Recognition Type"),
+                'type': 'combobox',
+                'key': 'RECOGNIZER_TYPE',
+                'options': ["google", "vosk"],
+                'default': "google",
+                'command': lambda value: SpeechRecognition.set_recognizer_type(value),
+                'tooltip': _("Выберите движок распознавания речи: Google или Vosk.", "Select speech recognition engine: Google or Vosk.")
+            },
+            {
                 'label': _("Распознавание", "Recognition"),
                 'type': 'checkbutton',
                 'key': 'MIC_ACTIVE',
@@ -1680,6 +1689,8 @@ class ChatGUI:
 
         elif key == "MIC_ACTIVE":
             SpeechRecognition.active = bool(value)
+        elif key == "RECOGNIZER_TYPE":
+            SpeechRecognition.set_recognizer_type(value)
 
         # logger.info(f"Настройки изменены: {key} = {value}")
     #endregion
@@ -2837,4 +2848,3 @@ class ChatGUI:
         else:
             logger.warning("Метод 'change_voice_language' отсутствует в объекте local_voice.")
     # endregion
-

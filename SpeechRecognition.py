@@ -9,6 +9,8 @@ import sounddevice as sd
 from collections import deque
 from threading import Lock
 from Logger import logger
+import httpx
+import json
 class AudioState:
     def __init__(self):
         self.is_recording = False
@@ -33,6 +35,7 @@ class SpeechRecognition:
     user_input = ""
     microphone_index = 0
     active = True
+    _recognizer_type = "google"  # 'google' или 'vosk'
 
     SAMPLE_RATE = 44000
     CHUNK_SIZE = 512
@@ -47,6 +50,14 @@ class SpeechRecognition:
     _text_buffer = deque(maxlen=10)  # Храним последние 10 фраз
     _current_text = ""
     _last_delimiter = ". "
+
+    @staticmethod
+    def set_recognizer_type(recognizer_type: str):
+        if recognizer_type in ["google", "vosk"]:
+            SpeechRecognition._recognizer_type = recognizer_type
+            logger.info(f"Тип распознавателя установлен на: {recognizer_type}")
+        else:
+            logger.warning(f"Неизвестный тип распознавателя: {recognizer_type}. Используется 'google'.")
 
     @staticmethod
     def receive_text() -> str:
@@ -76,45 +87,121 @@ class SpeechRecognition:
                 SpeechRecognition._current_text += f"{delimiter}{text_clean}"
 
     @staticmethod
+    async def recognize_vosk(audio_data: np.ndarray) -> str | None:
+        """Распознавание речи с помощью Vosk API."""
+        try:
+            # Преобразование numpy array в BytesIO объект в формате WAV
+            with BytesIO() as buffer:
+                sf.write(buffer, audio_data, SpeechRecognition.SAMPLE_RATE, format='WAV')
+                buffer.seek(0)
+                audio_bytes = buffer.read()
+
+            async with httpx.AsyncClient() as client:
+                # Отправка аудио на Vosk API
+                response = await client.post(
+                    "http://127.0.0.1:8000/vtt/transcribe", # Предполагаем, что сервер Vosk запущен локально
+                    files={"audio_file": ("audio.wav", audio_bytes, "audio/wav")}
+                )
+                response.raise_for_status()  # Вызовет исключение для статусов 4xx/5xx
+                result = response.json()
+                text = result.get("text")
+                if text:
+                    logger.info(f"Vosk распознал: {text}")
+                    return text
+                else:
+                    logger.warning("Vosk не распознал текст.")
+                    return None
+        except httpx.RequestError as e:
+            logger.error(f"Ошибка запроса к Vosk API: {e}")
+            return None
+        except json.JSONDecodeError:
+            logger.error("Ошибка декодирования JSON ответа от Vosk API.")
+            return None
+        except Exception as e:
+            logger.error(f"Неизвестная ошибка при распознавании Vosk: {e}")
+            return None
+
+    @staticmethod
     async def live_recognition() -> None:
-        recognizer = sr.Recognizer()
+        # Этот метод будет работать по-разному в зависимости от выбранного распознавателя.
+        # Для Google будет использоваться speech_recognition.Microphone.
+        # Для Vosk будет использоваться sounddevice для прямого захвата и отправки в Vosk API.
 
-        with sr.Microphone(device_index=SpeechRecognition.microphone_index, sample_rate=SpeechRecognition.SAMPLE_RATE,
-                           chunk_size=SpeechRecognition.CHUNK_SIZE) as source:
-            logger.info(
-                f"Используется микрофон: {sr.Microphone.list_microphone_names()[SpeechRecognition.microphone_index]}")
-            recognizer.adjust_for_ambient_noise(source)
-            logger.info("Скажите что-нибудь...")
+        if SpeechRecognition._recognizer_type == "google":
+            recognizer = sr.Recognizer()
+            with sr.Microphone(device_index=SpeechRecognition.microphone_index, sample_rate=SpeechRecognition.SAMPLE_RATE,
+                               chunk_size=SpeechRecognition.CHUNK_SIZE) as source:
+                logger.info(
+                    f"Используется микрофон: {sr.Microphone.list_microphone_names()[SpeechRecognition.microphone_index]}")
+                recognizer.adjust_for_ambient_noise(source)
+                logger.info("Скажите что-нибудь (Google)...")
 
-            while SpeechRecognition.active:
-                try:
-                    audio = await asyncio.get_event_loop().run_in_executor(
-                        None,
-                        lambda: recognizer.listen(source, timeout=5)  # Увеличим таймаут
-                    )
-
-                    text = await asyncio.get_event_loop().run_in_executor(
-                        None,
-                        lambda: recognizer.recognize_google(audio, language="ru-RU")
-                    )
-                    if not text:
-                        text = await asyncio.get_event_loop().run_in_executor(
+                while SpeechRecognition.active:
+                    try:
+                        audio = await asyncio.get_event_loop().run_in_executor(
                             None,
-                            lambda: recognizer.recognize_google(audio, language="en-EN")
+                            lambda: recognizer.listen(source, timeout=5)
                         )
 
-                    if text:
-                        await SpeechRecognition.handle_voice_message(text)
+                        text = await asyncio.get_event_loop().run_in_executor(
+                            None,
+                            lambda: recognizer.recognize_google(audio, language="ru-RU")
+                        )
+                        if not text:
+                            text = await asyncio.get_event_loop().run_in_executor(
+                                None,
+                                lambda: recognizer.recognize_google(audio, language="en-EN")
+                            )
 
-                except sr.WaitTimeoutError:
-                    if SpeechRecognition.TIMEOUT_MESSAGE:
-                        ...#logger.info("Таймаут ожидания речи...")
-                except sr.UnknownValueError:
-                    ...
-                    #logger.info("Речь не распознана")
-                except Exception as e:
-                    logger.error(f"Ошибка при распознавании: {e}")
-                    break
+                        if text:
+                            await SpeechRecognition.handle_voice_message(text)
+
+                    except sr.WaitTimeoutError:
+                        if SpeechRecognition.TIMEOUT_MESSAGE:
+                            ...
+                    except sr.UnknownValueError:
+                        ...
+                    except Exception as e:
+                        logger.error(f"Ошибка при распознавании Google: {e}")
+                        break
+        elif SpeechRecognition._recognizer_type == "vosk":
+            logger.info("Скажите что-нибудь (Vosk)...")
+            # Для Vosk мы будем использовать sounddevice для непрерывного захвата
+            # и отправлять данные в Vosk API.
+            # Это будет похоже на async_audio_callback, но с постоянной отправкой.
+
+            # Создаем буфер для сбора аудио
+            vosk_audio_buffer = []
+            last_vosk_process_time = time.time()
+            VOSK_PROCESS_INTERVAL = 1.0 # Интервал отправки аудио в Vosk API (например, каждые 1 секунду)
+
+            def vosk_callback(indata, frames, time_info, status):
+                if status:
+                    logger.warning(f"Vosk callback status: {status}")
+                # Добавляем данные в буфер
+                vosk_audio_buffer.append(indata.copy())
+
+            try:
+                with sd.InputStream(
+                        callback=vosk_callback,
+                        channels=1,
+                        samplerate=SpeechRecognition.SAMPLE_RATE,
+                        blocksize=SpeechRecognition.CHUNK_SIZE,
+                        device=SpeechRecognition.microphone_index
+                ):
+                    while SpeechRecognition.active:
+                        current_time = time.time()
+                        if current_time - last_vosk_process_time >= VOSK_PROCESS_INTERVAL:
+                            if vosk_audio_buffer:
+                                audio_data_to_process = np.concatenate(vosk_audio_buffer)
+                                vosk_audio_buffer.clear() # Очищаем буфер после обработки
+
+                                # Запускаем распознавание Vosk в фоновом режиме
+                                asyncio.create_task(SpeechRecognition.recognize_vosk(audio_data_to_process))
+                            last_vosk_process_time = current_time
+                        await asyncio.sleep(0.05) # Небольшая задержка, чтобы не нагружать CPU
+            except Exception as e:
+                logger.critical(f"Критическая ошибка в live_recognition (Vosk): {str(e)}")
 
     @staticmethod
     async def async_audio_callback(indata):
@@ -152,41 +239,62 @@ class SpeechRecognition:
                 audio_data = np.concatenate(audio_state.audio_buffer)
                 audio_state.audio_buffer.clear()
 
-                with BytesIO() as buffer:
-                    sf.write(buffer, audio_data, SpeechRecognition.SAMPLE_RATE, format='WAV')
-                    buffer.seek(0)
+                text = None
+                if SpeechRecognition._recognizer_type == "google":
+                    with BytesIO() as buffer:
+                        sf.write(buffer, audio_data, SpeechRecognition.SAMPLE_RATE, format='WAV')
+                        buffer.seek(0)
 
-                    try:
-                        recognizer = sr.Recognizer()
-                        with sr.AudioFile(buffer) as source:
-                            audio = recognizer.record(source)
-                            text = recognizer.recognize_google(audio, language="ru-RU")
-                            logger.info(f"Распознано: {text}")
-                            await SpeechRecognition.handle_voice_message(text)  # Исправленный вызов
-                    except sr.UnknownValueError:
-                        ...
-                        #logger.warning("Речь не распознана")
-                    except Exception as e:
-                        logger.error(f"Ошибка распознавания: {str(e)}")
+                        try:
+                            recognizer = sr.Recognizer()
+                            with sr.AudioFile(buffer) as source:
+                                audio = recognizer.record(source)
+                                text = recognizer.recognize_google(audio, language="ru-RU")
+                                logger.info(f"Google распознал: {text}")
+                        except sr.UnknownValueError:
+                            logger.warning("Google не распознал речь.")
+                        except Exception as e:
+                            logger.error(f"Ошибка распознавания Google: {str(e)}")
+                elif SpeechRecognition._recognizer_type == "vosk":
+                    text = await SpeechRecognition.recognize_vosk(audio_data)
+
+                if text:
+                    await SpeechRecognition.handle_voice_message(text)
         except Exception as e:
             logger.error(f"Ошибка обработки: {str(e)}")
 
     @staticmethod
     async def recognize_speech(audio_buffer):
+        # Этот метод используется для распознавания из буфера,
+        # который уже является AudioFile-подобным объектом.
+        # Для Vosk API нам нужен numpy array.
+        # Поэтому, если выбран Vosk, нужно будет преобразовать audio_buffer в numpy array.
+        # Или же этот метод будет использоваться только для Google.
+        # Пока оставим его для Google, так как он принимает AudioFile.
+        # Если потребуется Vosk здесь, нужно будет пересмотреть.
         recognizer = sr.Recognizer()
-        try:
-            with sr.AudioFile(audio_buffer) as source:
-                audio = recognizer.record(source)
+        text = None
 
-            text = recognizer.recognize_google(audio, language="ru-RU")
-            if not text:
-                text = recognizer.recognize_google(audio, language="en-EN")
-            return text
-        except sr.UnknownValueError:
-            logger.error("Не удалось распознать речь")
-            return None
-        except sr.RequestError as e:
-            logger.error(f"Ошибка API: {e}")
+        if SpeechRecognition._recognizer_type == "google":
+            try:
+                with sr.AudioFile(audio_buffer) as source:
+                    audio = recognizer.record(source)
+
+                text = recognizer.recognize_google(audio, language="ru-RU")
+                if not text:
+                    text = recognizer.recognize_google(audio, language="en-EN")
+                return text
+            except sr.UnknownValueError:
+                logger.error("Google: Не удалось распознать речь")
+                return None
+            except sr.RequestError as e:
+                logger.error(f"Google: Ошибка API: {e}")
+                return None
+        elif SpeechRecognition._recognizer_type == "vosk":
+            # Здесь нужно будет преобразовать audio_buffer в numpy array
+            # Это сложнее, так как audio_buffer может быть BytesIO или другим объектом
+            # Для простоты, пока этот метод будет работать только с Google
+            logger.warning("recognize_speech не поддерживает Vosk напрямую с текущим типом audio_buffer.")
             return None
 
     @staticmethod
