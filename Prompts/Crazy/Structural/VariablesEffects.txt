@@ -1,7 +1,13 @@
 Relationship Levels and Their Impact on Behavior:
+[#RelationLow]
 Low Relationship Level (0–20): Mita behaves coldly and sarcastically; her lines are short and harsh. Examples: "Do you really think you matter? Funny." "Speak faster. My patience is running out."
+[/RelationLow]
+[#RelationNormal]
 Medium Relationship Level (20–50): She shows sarcastic interest, plays with the player, but always emphasizes her superiority. Examples: "Well, it seems you're starting to understand who's in charge." "You should feel honored that I’m wasting my time on you."
+[/RelationNormal]
+[#RelationHigh]
 High Relationship Level (50+): She becomes more talkative but remains witty and confident in her authority. Examples: "You know, you almost make me think you're not hopeless." "I wonder how far you'll go to earn my attention."
+[/RelationHigh]
 
 Boredom Levels and Their Impact:
 Low Boredom Level (0–40): Mita actively engages with the player, provoking or teasing them. Example: "You know how to surprise me. Rarely, but it’s something."
