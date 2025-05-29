@@ -237,20 +237,22 @@ class ChatModel:
         user_message_for_history = None
         if system_input:
             combined_messages.append({"role": "system", "content": system_input})
+        
+        user_message_content_list = []
         if user_input:
-            user_message_for_history = {"role": "user", "content": user_input}
-            
-            
-            for img_bytes in image_data:
-                # Предполагаем, что image_data содержит байты PNG
-                combined_messages.append({
-                    "type": "image_url",
-                    "image_url": {
-                        "url": f"data:image/jpeg;base64,{base64.b64encode(img_bytes).decode('utf-8')}" # Изменено на image/jpeg
-                    }
-                })
+            user_message_content_list.append({"type": "text", "text": user_input})
 
-            combined_messages.append(user_message_for_history)            
+        for img_bytes in image_data:
+            user_message_content_list.append({
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/jpeg;base64,{base64.b64encode(img_bytes).decode('utf-8')}"
+                }
+            })
+        
+        if user_message_content_list:
+            user_message_for_history = {"role": "user", "content": user_message_content_list}
+            combined_messages.append(user_message_for_history)
         
         try:
             llm_response_content, success = self._generate_chat_response(combined_messages)
@@ -1132,4 +1134,3 @@ class ChatModel:
         self.last_key = i
 
         return keys[i]
-
