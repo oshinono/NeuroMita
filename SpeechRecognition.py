@@ -103,7 +103,7 @@ class SpeechRecognition:
             
             logger.debug(f"Размер аудиоданных для Vosk API: {len(audio_bytes)} байт")
 
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=60.0) as client: # Увеличиваем таймаут до 60 секунд
                 # Отправка аудио на Vosk API
                 response = await client.post(
                     "http://127.0.0.1:8000/api/vtt/transcribe",  # Предполагаем, что сервер Vosk запущен локально
