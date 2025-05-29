@@ -211,6 +211,13 @@ class ChatGUI:
 
         self.start_silero_async()
 
+        # Загружаем настройки распознавания речи при запуске
+        initial_recognizer_type = self.settings.get("RECOGNIZER_TYPE", "google")
+        initial_vosk_model = self.settings.get("VOSK_MODEL", "vosk-model-ru-0.10")
+
+        SpeechRecognition.set_recognizer_type(initial_recognizer_type)
+        SpeechRecognition.vosk_model = initial_vosk_model
+
         SpeechRecognition.speach_recognition_start(self.device_id, self.loop)
 
         # Запуск проверки переменной textToTalk через after
