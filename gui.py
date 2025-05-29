@@ -3,7 +3,6 @@ from AudioHandler import AudioHandler
 from Logger import logger
 from SettingsManager import SettingsManager, CollapsibleSection
 from chat_model import ChatModel
-from web.client import MikuTTSClient
 from server import ChatServer
 
 from Silero import TelegramBotHandler
@@ -185,6 +184,8 @@ class ChatGUI:
         self.waiting_answer = False
 
         self.root = tk.Tk()
+        self.root.wm_iconphoto(False, tk.PhotoImage(file = 'icon.png'))
+        
         self.root.title(_("Чат с NeuroMita","NeuroMita Chat"))
 
         self.ffmpeg_install_popup = None 
@@ -992,7 +993,7 @@ class ChatGUI:
                 {'label': _('Канал/Сервис', "Channel/Service"), 'key': 'AUDIO_BOT', 'type': 'combobox',
                  'options': ["@silero_voice_bot", "@CrazyMitaAIbot"], 'default': "@silero_voice_bot",
                  'tooltip': _("Выберите бота", "Select bot")},
-                {'label': _('Макс. ожидание (сек)', 'Max wait (sec)'), 'key': 'SILERO_TIME', 'type': 'entry', 'default': 12, 'validation': self.validate_number},
+                {'label': _('Макс. ожидание (сек)', 'Max wait (sec)'), 'key': 'SILERO_TIME', 'type': 'entry', 'default': 12, 'validation': self.validate_number_0_60},
                 {'label': _('Настройки Telegram API', 'Telegram API Settings'), 'type': 'text'},
                  {'label': _('Будет скрыто после перезапуска','Will be hidden after restart')},
                 {'label': _('Telegram ID'), 'key': 'NM_TELEGRAM_API_ID', 'type': 'entry', 'default': "", 'hide': bool(self.settings.get("HIDE_PRIVATE"))},
@@ -1336,14 +1337,32 @@ class ChatGUI:
                                      _("Общие настройки моделей", "General settings for models"),
                                      general_config)
     # region Validation
-    def validate_number(self, new_value):
+    def validate_number_0_60(self, new_value):
         if not new_value.isdigit():  # Проверяем, что это число
             return False
         return 0 <= int(new_value) <= 60  # Проверяем, что в пределах диапазона
 
+    def validate_float_0_1(self, new_value):
+        try:
+            val = float(new_value)
+            return 0.0 <= val <= 1.0
+        except ValueError:
+            return False
+
+    def validate_float_positive(self, new_value):
+        try:
+            val = float(new_value)
+            return val > 0.0
+        except ValueError:
+            return False
+
+    def save_api_settings(self):
+        """Собирает данные из полей ввода и сохраняет только непустые значения, не перезаписывая существующие."""
+
     # Добавьте функции валидации в ChatGUI
     def validate_positive_integer(self, new_value):
         if new_value == "": return True  # Разрешаем пустое поле временно
+
         try:
             value = int(new_value)
             return value > 0
@@ -1667,11 +1686,59 @@ class ChatGUI:
                 'type': 'combobox',
                 'key': 'MIC_DEVICE',
                 'options': self.get_microphone_list(),
-                'default': '',
+                'default': self.get_microphone_list()[0] if self.get_microphone_list() else "",
                 'command': self.on_mic_selected,
                 'widget_attrs': {
                     'width': 30
                 }
+            },
+            {
+                'label': _("Тип распознавания", "Recognition Type"),
+                'type': 'combobox',
+                'key': 'RECOGNIZER_TYPE',
+                'options': ["google", "vosk"],
+                'default': "google",
+                'command': lambda value: SpeechRecognition.set_recognizer_type(value),
+                'tooltip': _("Выберите движок распознавания речи: Google или Vosk.", "Select speech recognition engine: Google or Vosk."),
+                'command': self.update_vosk_model_visibility
+            },
+            {
+                'label': _("Модель Vosk", "Vosk Model"),
+                'type': 'combobox',
+                'key': 'VOSK_MODEL',
+                'options': ["vosk-model-ru-0.10"],
+                'default': "vosk-model-ru-0.10",
+                'tooltip': _("Выберите модель Vosk.", "Select Vosk model."),
+                'widget_attrs': {
+                    'width': 30
+                },
+                'hide': True,
+                'condition_key': 'RECOGNIZER_TYPE',
+                'condition_value': 'vosk'
+            },
+            {
+                'label': _("Порог тишины (VAD)", "Silence Threshold (VAD)"),
+                'type': 'entry',
+                'key': 'SILENCE_THRESHOLD',
+                'default': 0.01,
+                'validation': self.validate_float_positive,
+                'tooltip': _("Порог громкости для определения начала/конца речи (VAD).", "Volume threshold for Voice Activity Detection (VAD).")
+            },
+            {
+                'label': _("Длительность тишины (VAD, сек)", "Silence Duration (VAD, sec)"),
+                'type': 'entry',
+                'key': 'SILENCE_DURATION',
+                'default': 0.5,
+                'validation': self.validate_float_positive,
+                'tooltip': _("Длительность тишины для определения конца фразы (VAD).", "Duration of silence to detect end of phrase (VAD).")
+            },
+            {
+                'label': _("Интервал обработки Vosk (сек)", "Vosk Process Interval (sec)"),
+                'type': 'entry',
+                'key': 'VOSK_PROCESS_INTERVAL',
+                'default': 0.1,
+                'validation': self.validate_float_positive,
+                'tooltip': _("Интервал, с которым Vosk обрабатывает аудио в режиме реального времени.", "Interval at which Vosk processes audio in live recognition mode.")
             },
             {
                 'label': _("Распознавание", "Recognition"),
@@ -1711,6 +1778,8 @@ class ChatGUI:
                     elif isinstance(child, tk.Checkbutton):
                         if 'MIC_ACTIVE' in str(widget):
                             self.mic_active_check = child
+                    elif isinstance(child, ttk.Combobox) and 'VOSK_MODEL' in str(widget):
+                        self.vosk_model_combobox = child
 
     def get_microphone_list(self):
         try:
@@ -1724,6 +1793,26 @@ class ChatGUI:
         except Exception as e:
             logger.info(f"Ошибка получения списка микрофонов: {e}")
             return []
+
+    def update_vosk_model_visibility(self, value):
+        """Показывает/скрывает настройки Vosk в зависимости от выбранного типа."""
+        show_vosk = value == "vosk"
+        for widget in self.mic_section.content_frame.winfo_children():
+            for child in widget.winfo_children():
+                if hasattr(child, 'setting_key') and child.setting_key == 'VOSK_MODEL':
+                    if show_vosk:
+                        widget.pack(fill=tk.X, pady=2)
+                    else:
+                        widget.pack_forget()
+
+    def on_mic_selected(self, event):
+        selection = self.mic_combobox.get()
+        if selection:
+            self.selected_microphone = selection.split(" (")[0]
+            device_id = int(selection.split(" (")[-1].replace(")", ""))
+            self.device_id = device_id
+            logger.info(f"Выбран микрофон: {self.selected_microphone} (ID: {device_id})")
+            self.save_mic_settings(device_id)
 
     def update_mic_list(self):
         self.mic_combobox['values'] = self.get_microphone_list()
@@ -1851,6 +1940,17 @@ class ChatGUI:
                 self.start_screen_capture_thread()
             else:
                 logger.info(f"Настройка захвата экрана '{key}' изменена на '{value}'. Поток захвата не активен, изменения будут применены при следующем запуске.")
+        elif key == "RECOGNIZER_TYPE":
+            SpeechRecognition.set_recognizer_type(value)
+            self.update_vosk_model_visibility(value)
+        elif key == "VOSK_MODEL":
+            SpeechRecognition.vosk_model = value
+        elif key == "SILENCE_THRESHOLD":
+            SpeechRecognition.SILENCE_THRESHOLD = float(value)
+        elif key == "SILENCE_DURATION":
+            SpeechRecognition.SILENCE_DURATION = float(value)
+        elif key == "VOSK_PROCESS_INTERVAL":
+            SpeechRecognition.VOSK_PROCESS_INTERVAL = float(value)
 
         # logger.info(f"Настройки изменены: {key} = {value}")
     #endregion
