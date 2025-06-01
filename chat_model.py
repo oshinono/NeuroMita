@@ -161,8 +161,8 @@ class ChatModel:
         self.sleepy_character = SleepyMita("Sleepy","Sleepy Mita", "/speaker dream", short_name="SleepyMita", miku_tts_name="/set_person SleepyMita", silero_turn_off_video=True)
         self.creepy_character = CreepyMita("Creepy","Creepy Mita", "/speaker ghost", short_name="GhostMita", miku_tts_name="/set_person GhostMita", silero_turn_off_video=True)
         
-        self.cart_space = SpaceCartridge("Cart_portal", "Cart_portal", "/speaker wheatley", short_name="Player", miku_tts_name="/set_person Player", silero_turn_off_video=True)
-        self.cart_divan = DivanCartridge("Cart_divan", "Cart_divan", "/speaker engineer", short_name="Player", miku_tts_name="/set_person Player", silero_turn_off_video=True)
+        self.cart_space = SpaceCartridge("Cart_portal", "Cart_portal", "/speaker wheatley", short_name="Player", miku_tts_name="/set_person Player", silero_turn_off_video=True,is_cartridge=True)
+        self.cart_divan = DivanCartridge("Cart_divan", "Cart_divan", "/speaker engineer", short_name="Player", miku_tts_name="/set_person Player", silero_turn_off_video=True,is_cartridge=True)
         self.GameMaster = GameMaster("GameMaster", "GameMaster", "/speaker dryad", short_name="PhoneMita", miku_tts_name="/set_person PhoneMita", silero_turn_off_video=True)
 
         self.characters = {

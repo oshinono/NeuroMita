@@ -1703,26 +1703,27 @@ class ChatGUI:
                 'label': _("Тип распознавания", "Recognition Type"),
                 'type': 'combobox',
                 'key': 'RECOGNIZER_TYPE',
-                'options': ["google", "vosk"],
+                # TODO Вернуть воск 'options': ["google", "vosk"],
+                'options': ["google"],
                 'default': "google",
                 'command': lambda value: SpeechRecognition.set_recognizer_type(value),
                 'tooltip': _("Выберите движок распознавания речи: Google или Vosk.", "Select speech recognition engine: Google or Vosk."),
                 'command': self.update_vosk_model_visibility
             },
-            {
-                'label': _("Модель Vosk", "Vosk Model"),
-                'type': 'combobox',
-                'key': 'VOSK_MODEL',
-                'options': ["vosk-model-ru-0.10"],
-                'default': "vosk-model-ru-0.10",
-                'tooltip': _("Выберите модель Vosk.", "Select Vosk model."),
-                'widget_attrs': {
-                    'width': 30
-                },
-                'hide': True,
-                'condition_key': 'RECOGNIZER_TYPE',
-                'condition_value': 'vosk'
-            },
+            # {
+            #     'label': _("Модель Vosk", "Vosk Model"),
+            #     'type': 'combobox',
+            #     'key': 'VOSK_MODEL',
+            #     'options': ["vosk-model-ru-0.10"],
+            #     'default': "vosk-model-ru-0.10",
+            #     'tooltip': _("Выберите модель Vosk.", "Select Vosk model."),
+            #     'widget_attrs': {
+            #         'width': 30
+            #     },
+            #     'hide': True,
+            #     'condition_key': 'RECOGNIZER_TYPE',
+            #     'condition_value': 'vosk'
+            # },
             {
                 'label': _("Порог тишины (VAD)", "Silence Threshold (VAD)"),
                 'type': 'entry',

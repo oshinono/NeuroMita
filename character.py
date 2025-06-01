@@ -47,7 +47,9 @@ class Character:
                  short_name: str, # NeuroMita used this
                  miku_tts_name: str = "Player", 
                  silero_turn_off_video: bool = False,
-                 initial_vars_override: Dict[str, Any] | None = None): # For explicit initial values passed in
+                 initial_vars_override: Dict[str, Any] | None = None,
+                 is_cartridge = False
+                 ): # For explicit initial values passed in
         
         self.char_id = char_id # For DSL logging and Prompts path
         self.name = name # Display name
@@ -57,12 +59,14 @@ class Character:
         self.silero_turn_off_video = silero_turn_off_video
         self.miku_tts_name = miku_tts_name
         self.short_name = short_name
-        self.prompts_root = os.path.abspath("Prompts")
+        self.prompts_root = os.path.abspath("Prompts") if not is_cartridge else os.path.abspath("Prompts/Cartridges")
         self.base_data_path = os.path.join(self.prompts_root, self.char_id) # Path for character's DSL files
         self.main_template_path_relative = "main_template.txt"
 
         self.variables: Dict[str, Any] = {} # Initialize first
-        
+        self.is_cartridge = is_cartridge
+
+
         # Compose initial variables: Base -> Subclass Overrides -> Passed-in Overrides
         composed_initials = Character.BASE_DEFAULTS.copy()
         # Subclass overrides (defined in subclasses like CrazyMita)
@@ -285,7 +289,7 @@ class Character:
         self.set_variable("SYSTEM_DATETIME", datetime.datetime.now().isoformat(" ", "minutes"))
 
         if hasattr(self, 'post_dsl_interpreter') and self.post_dsl_interpreter:
-            self.post_dsl_interpreter._load_rules()  # Ensure _load_rules can be called to refresh
+            self.post_dsl_interpreter._load_rules_and_configs()  # Ensure _load_rules can be called to refresh
             logger.info(f"[{self.char_id}] Post-DSL rules reloaded.")
         else:  # Initialize if it wasn't (e.g. loading an old character state)
             path_resolver_instance = LocalPathResolver(

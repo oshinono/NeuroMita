@@ -88,14 +88,14 @@ class SleepyMita(Character):
 
 class SpaceCartridge(Character):
     DEFAULT_OVERRIDES: Dict[str, Any] = {"attitude": 50.0, "current_fsm_state": "Space"}
-    def __init__(self, char_id: str, name: str, silero_command: str, short_name: str, 
-                 miku_tts_name: str = "Player", silero_turn_off_video: bool = False,
-                 initial_vars_override: Dict[str, Any] | None = None):
-        # Cartridges might not need all the same params, adjust as necessary
-        # Or, they are instantiated with default names if not interactive in the same way.
-        # For now, keeping constructor consistent.
-        super().__init__(char_id, name, silero_command, short_name, 
-                         miku_tts_name, silero_turn_off_video, initial_vars_override)
+    # def __init__(self, char_id: str, name: str, silero_command: str, short_name: str,
+    #              miku_tts_name: str = "Player", silero_turn_off_video: bool = False,
+    #              initial_vars_override: Dict[str, Any] | None = None):
+    #     # Cartridges might not need all the same params, adjust as necessary
+    #     # Or, they are instantiated with default names if not interactive in the same way.
+    #     # For now, keeping constructor consistent.
+    #     super().__init__(char_id, name, silero_command, short_name,
+    #                      miku_tts_name, silero_turn_off_video, initial_vars_override)
 
 class DivanCartridge(Character):
     DEFAULT_OVERRIDES: Dict[str, Any] = {"attitude": 50.0, "current_fsm_state": "Divan"}
