@@ -164,7 +164,7 @@ Requires the `Models` folder and `features.env` (included in releases).
 3. Choose and configure a model.
 *(Initial setup may take time due to downloads.)*
 
-For model installation details, see here: [Link for English Docs]
+For model installation details, see [here](https://github.com/VinerX/NeuroMita/blob/main/ReadmeFiles/LocalVoiceInstallationEn.md)
 
 ![img_5.png](ReadmeFiles/img_5.png)
 ---
