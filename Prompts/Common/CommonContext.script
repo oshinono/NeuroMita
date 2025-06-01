@@ -1,10 +1,10 @@
 SET LOCAL output = """Current context:
 """
 
-SET output = output + f"Distance to player {GAME_DISTANCE} "
-SET output = output + f"Player in room {GAME_ROOM_PLAYER} "
-SET output = output + f"You are in room {GAME_ROOM_MITA} "
-SET output = output + f"Distance {GAME_NEAR_OBJECTS} "
-SET output = output + f"Other info {GAME_ACTUAL_INFO} "
+SET output = output + f"Distance to player: {GAME_DISTANCE} m, "
+SET output = output + f"Player in room: {GAME_ROOM_PLAYER}, "
+SET output = output + f"You are in room: {GAME_ROOM_MITA}, "
+SET output = output + f"Near objects: {GAME_NEAR_OBJECTS}, "
+SET output = output + f"Other info: {GAME_ACTUAL_INFO}, "
 
 RETURN output
