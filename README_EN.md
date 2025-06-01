@@ -161,8 +161,11 @@ Requires the `Models` folder and `features.env` (included in releases).
 
 1. Enable voice generation.  
 2. Select **Local** (requires `features.env`).  
-3. Choose and configure a model.  
-*(Initial setup may take time due to downloads.)*  
+3. Choose and configure a model.
+*(Initial setup may take time due to downloads.)*
+
+For model installation details, see here: [Link for English Docs]
+
 ![img_5.png](ReadmeFiles/img_5.png)
 ---
 
