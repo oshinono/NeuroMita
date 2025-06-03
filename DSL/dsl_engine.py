@@ -757,3 +757,51 @@ class DslInterpreter:
             dsl_execution_logger.error(f"Unexpected Python error processing main template '{rel_path_main_template}' (resolved: {resolved_main_template_id}): {e}", exc_info=True)
             print(f"{RED}Unexpected Python error in main template {rel_path_main_template}: {e}{RST}\n{traceback.format_exc()}", file=sys.stderr)
             return f"[PY ERROR IN MAIN TEMPLATE {os.path.basename(resolved_main_template_id or rel_path_main_template)} - CHECK LOGS]"
+
+    def process_file(self, rel_file_path: str) -> str:
+        """
+        Processes a given file (script or text) and returns its content.
+        This acts as a unified entry point for processing individual prompt files.
+        """
+        resolved_file_id: str = ""
+        try:
+            char_ctx_filter.set_character_id(getattr(self.character, "char_id", "NO_CHAR_CTX"))
+            dsl_execution_logger.info(f"Processing individual file: {rel_file_path} for character {self.character.char_id}")
+            
+            try:
+                resolved_file_id = self.resolver.resolve_path(rel_file_path)
+            except PathResolverError as pre:
+                raise DslError(
+                    message=f"Cannot resolve file path '{rel_file_path}': {pre.message}",
+                    script_path=rel_file_path,
+                    original_exception=pre
+                ) from pre
+
+            if rel_file_path.endswith(".script"):
+                # For .script files, execute them
+                content = self.execute_dsl_script(rel_file_path)
+            elif rel_file_path.endswith(".txt"):
+                # For .txt files, load and process as template content
+                try:
+                    raw_content = self.resolver.load_text(resolved_file_id, f"individual file {rel_file_path}")
+                except PathResolverError as pre:
+                    raise DslError(
+                        message=f"Cannot load file content for '{rel_file_path}': {pre.message}",
+                        script_path=resolved_file_id,
+                        original_exception=pre
+                    ) from pre
+                content = self.process_template_content(raw_content, f"individual file {rel_file_path}")
+                content = self._apply_inserts(content, ctx=f"individual file {rel_file_path}")
+            else:
+                raise DslError(f"Unsupported file type for individual processing: {rel_file_path}", script_path=rel_file_path)
+            
+            dsl_execution_logger.info(f"Successfully processed individual file: {rel_file_path}")
+            return content
+        except DslError as e:
+            dsl_execution_logger.error(f"DslError while processing individual file '{rel_file_path}' (resolved: {e.script_path or resolved_file_id}): {e.message}", exc_info=False)
+            print(f"{RED}{str(e)}{RST}", file=sys.stderr)
+            return f"[DSL ERROR IN FILE {os.path.basename(e.script_path or resolved_file_id or rel_file_path)} - CHECK LOGS]"
+        except Exception as e:
+            dsl_execution_logger.error(f"Unexpected Python error processing individual file '{rel_file_path}' (resolved: {resolved_file_id}): {e}", exc_info=True)
+            print(f"{RED}Unexpected Python error in file {rel_file_path}: {e}{RST}\n{traceback.format_exc()}", file=sys.stderr)
+            return f"[PY ERROR IN FILE {os.path.basename(resolved_file_id or rel_file_path)} - CHECK LOGS]"

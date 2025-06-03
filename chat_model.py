@@ -73,6 +73,9 @@ class ChatModel:
         self.current_character_to_change = str(self.gui.settings.get("CHARACTER"))
         self.characters: Dict[str, Character] = {}
 
+        # New setting for individual system messages
+        self.send_system_messages_individually = bool(self.gui.settings.get("SEND_SYSTEM_MESSAGES_INDIVIDUALLY", True))
+
         # Game-specific state - these should ideally be passed to character or managed elsewhere if possible
         # For now, keeping them here as per original. DSL might need them injected into character.variables.
         self.distance = 0.0
@@ -224,7 +227,34 @@ class ChatModel:
         self.current_character.variables["GAME_NEAR_OBJECTS"] = self.nearObjects
         self.current_character.variables["GAME_ACTUAL_INFO"] = self.actualInfo
 
-        combined_messages = self.current_character.get_full_system_setup_for_llm()
+        combined_messages = []
+
+        # Logic for individual system messages, moved from Character to ChatModel
+        if self.send_system_messages_individually:
+            # Load the main template content to extract individual file paths
+            main_template_content = ""
+            try:
+                resolved_main_template_id = self.current_character.dsl_interpreter.resolver.resolve_path(self.current_character.main_template_path_relative)
+                main_template_content = self.current_character.dsl_interpreter.resolver.load_text(resolved_main_template_id, f"main template for individual messages for {self.current_character.char_id}")
+            except Exception as e:
+                logger.error(f"Critical error loading main template {self.current_character.main_template_path_relative} for {self.current_character.char_id}: {e}", exc_info=True)
+                combined_messages.append({"role": "system", "content": f"[CRITICAL ERROR LOADING MAIN TEMPLATE FOR {self.current_character.char_id}]"})
+                # Continue to add memory and history, but main system prompt is broken
+            
+            # Extract all [<path>] placeholders from the main template content
+            file_paths_from_template = self.current_character.dsl_interpreter.placeholder_pattern.findall(main_template_content)
+            
+            for file_path_relative in file_paths_from_template:
+                try:
+                    content = self.current_character.dsl_interpreter.process_file(file_path_relative)
+                    if content and content.strip():
+                        combined_messages.append({"role": "system", "content": content})
+                except Exception as e:
+                    logger.error(f"Critical error during DSL processing for individual file {file_path_relative} for {self.current_character.char_id}: {e}", exc_info=True)
+                    combined_messages.append({"role": "system", "content": f"[ERROR PROCESSING {file_path_relative}]"})
+        else:
+            # Original logic: combine all into one main system prompt
+            combined_messages.extend(self.current_character.get_full_system_setup_for_llm())
 
         if self.current_character != self.GameMaster:
             llm_messages_history_limited = llm_messages_history[-self.memory_limit:]
