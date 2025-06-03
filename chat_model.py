@@ -345,7 +345,7 @@ class ChatModel:
             logger.info(f"Generation attempt {attempt}/{max_attempts}")
             response_text = None
 
-            save_combined_messages(combined_messages, f"Attempt_{attempt}")
+            save_combined_messages(combined_messages, "SavedMessages/last_attempt_log")
 
             try:
                 if bool(self.gui.settings.get("NM_API_REQ", False)):
@@ -845,7 +845,7 @@ class ChatModel:
 
         logger.info("Отправляю запрос к Gemini.")
         logger.debug(f"Отправляемые данные (Gemini): {data}")  # Добавляем логирование содержимого
-        save_combined_messages(data, "Gem2")
+        save_combined_messages(data, "SavedMessages/last_gemini_log")
         response = requests.post(self.api_url, headers=headers, json=data)
 
         if response.status_code == 200:
@@ -878,7 +878,7 @@ class ChatModel:
 
         logger.info("Отправляю запрос к RequestCommon.")
         logger.debug(f"Отправляемые данные (RequestCommon): {data}")  # Добавляем логирование содержимого
-        save_combined_messages(data, "RequestCommon")
+        save_combined_messages(data, "SavedMessages/last_request_common_log")
         response = requests.post(self.api_url, headers=headers, json=data)
 
         if response.status_code == 200:
