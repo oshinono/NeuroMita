@@ -1255,6 +1255,8 @@ class ChatGUI:
         general_config = [
             # здесь настройки из setup_model_controls
             {'label': _('Настройки сообщений', 'Message settings'), 'type': 'text'},
+            {'label': _('Промты раздельно', 'Separated prompts'), 'key': 'SEPARATE_PROMPTS',
+             'type': 'checkbutton', 'default_checkbutton': True},
             {'label': _('Лимит сообщений', 'Message limit'), 'key': 'MODEL_MESSAGE_LIMIT',
              'type': 'entry', 'default': 40,
              'tooltip': _('Сколько сообщений будет помнить мита', 'How much messages Mita will remember')},

@@ -181,3 +181,4 @@ ffmpeg_download_temp.zip
 # VTT
 web/vtt/models/*
 /SpeechRecognition/Models
+/Logs

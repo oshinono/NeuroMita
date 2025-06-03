@@ -73,8 +73,6 @@ class ChatModel:
         self.current_character_to_change = str(self.gui.settings.get("CHARACTER"))
         self.characters: Dict[str, Character] = {}
 
-        # New setting for individual system messages
-        self.send_system_messages_individually = bool(self.gui.settings.get("SEND_SYSTEM_MESSAGES_INDIVIDUALLY", True))
 
         # Game-specific state - these should ideally be passed to character or managed elsewhere if possible
         # For now, keeping them here as per original. DSL might need them injected into character.variables.
@@ -230,7 +228,7 @@ class ChatModel:
         combined_messages = []
 
         # Logic for individual system messages, moved from Character to ChatModel
-        if self.send_system_messages_individually:
+        if bool(self.gui.settings.get("SEPARATE_PROMPTS", True)):
             # Load the main template content to extract individual file paths
             main_template_content = ""
             try:
