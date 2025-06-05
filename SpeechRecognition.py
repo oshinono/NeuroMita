@@ -11,6 +11,14 @@ from threading import Lock
 from Logger import logger
 import httpx
 import json
+import wave
+import sys
+from vosk import Model, KaldiRecognizer, SetLogLevel
+import io
+
+# You can set log level to -1 to disable debug messages
+SetLogLevel(0) # Возвращено к 0
+
 class AudioState:
     def __init__(self):
         self.is_recording = False
@@ -39,7 +47,7 @@ class SpeechRecognition:
     vosk_model = "vosk-model-ru-0.10" #vosk-model-small-ru
 
     SAMPLE_RATE = 44000
-    CHUNK_SIZE = 512
+    CHUNK_SIZE = 2048 # Увеличено для уменьшения переполнения буфера
     TIMEOUT_MESSAGE = True
     SILENCE_THRESHOLD = 0.02  # Порог тишины
     SILENCE_DURATION = 4  # Длительность тишины для завершения записи
@@ -48,7 +56,7 @@ class SpeechRecognition:
     MIN_RECORDING = 1.0
     MIN_RECORDING_DURATION = 1  # Минимальная длительность записи
     BUFFER_TIMEOUT = 0.05
-    VOSK_PROCESS_INTERVAL = 0.1 # Интервал обработки Vosk (сек)
+    VOSK_PROCESS_INTERVAL = 0.3 # Увеличено для уменьшения переполнения буфера
     _text_lock = Lock()
     _text_buffer = deque(maxlen=10)  # Храним последние 10 фраз
     _current_text = ""
@@ -91,43 +99,77 @@ class SpeechRecognition:
                 SpeechRecognition._current_text += f"{delimiter}{text_clean}"
 
     @staticmethod
-    async def recognize_vosk(audio_data: np.ndarray) -> str | None:
-        """Распознавание речи с помощью Vosk API."""
-        try:
-            # Преобразование numpy array в BytesIO объект в формате WAV
-            with BytesIO() as buffer:
-                # Явно указываем subtype для совместимости
-                sf.write(buffer, audio_data, SpeechRecognition.SAMPLE_RATE, format='WAV', subtype='PCM_16')
-                buffer.seek(0)
-                audio_bytes = buffer.read()
-            
-            logger.debug(f"Размер аудиоданных для Vosk API: {len(audio_bytes)} байт")
+    def _stereo_to_mono(audio_data):
+        return np.mean(audio_data, axis=1, dtype=audio_data.dtype)
 
-            async with httpx.AsyncClient(timeout=60.0) as client: # Увеличиваем таймаут до 60 секунд
-                # Отправка аудио на Vosk API
-                response = await client.post(
-                    "http://127.0.0.1:8000/api/vtt/transcribe",  # Предполагаем, что сервер Vosk запущен локально
-                    data={"model_name": SpeechRecognition.vosk_model}, # Отправляем имя модели как form-data
-                    files={"file": ("audio.wav", audio_bytes, "audio/wav")} # Изменяем имя поля на 'file'
-                )
-                response.raise_for_status()  # Вызовет исключение для статусов 4xx/5xx
-                result = response.json()
-                text = result.get("text")
-                if text:
-                    logger.info(f"Vosk распознал: {text}")
-                    return text
+    _vosk_model_instance = None
+    _vosk_rec_instance = None
+
+    @staticmethod
+    def _init_vosk_recognizer():
+        if SpeechRecognition._vosk_model_instance is None:
+            model_path = f"SpeechRecognitionModels/Vosk/{SpeechRecognition.vosk_model}"
+            try:
+                SpeechRecognition._vosk_model_instance = Model(model_path)
+                logger.info(f"Модель Vosk загружена из: {model_path}")
+            except Exception as e:
+                logger.error(f"Ошибка загрузки модели Vosk из {model_path}: {e}")
+                return False
+        
+        if SpeechRecognition._vosk_rec_instance is None:
+            SpeechRecognition._vosk_rec_instance = KaldiRecognizer(SpeechRecognition._vosk_model_instance, SpeechRecognition.SAMPLE_RATE)
+            SpeechRecognition._vosk_rec_instance.SetWords(True)
+            SpeechRecognition._vosk_rec_instance.SetPartialWords(True)
+            logger.info("Распознаватель Vosk инициализирован.")
+        return True
+
+    @staticmethod
+    async def recognize_vosk(audio_data: np.ndarray) -> str | None:
+        if not SpeechRecognition._init_vosk_recognizer():
+            return None
+
+        # Vosk ожидает int16, а sounddevice дает float32.
+        # Преобразуем float32 в int16
+        audio_data_int16 = (audio_data * 32767).astype(np.int16)
+
+        # Создаем in-memory wave file
+        bytes_io = io.BytesIO()
+        with wave.open(bytes_io, 'wb') as mono_wf:
+            mono_wf.setnchannels(1)
+            mono_wf.setsampwidth(2)  # 2 bytes for int16
+            mono_wf.setframerate(SpeechRecognition.SAMPLE_RATE)
+            mono_wf.writeframes(audio_data_int16.tobytes())
+        
+        bytes_io.seek(0)
+        
+        recognized_text = ''
+        rec = SpeechRecognition._vosk_rec_instance # Используем инициализированный распознаватель
+
+        # Сбрасываем состояние распознавателя для нового аудио
+        rec.Reset()
+
+        # Читаем данные из in-memory wave file
+        with wave.open(bytes_io, 'rb') as wf:
+            while True:
+                data = wf.readframes(4000) # Читаем по 4000 фреймов
+                if len(data) == 0:
+                    break
+                if rec.AcceptWaveform(data):
+                    stepResult = rec.Result()
+                    recognized_json = json.loads(stepResult)
+                    if 'text' in recognized_json and recognized_json['text']:
+                        recognized_text += ' ' + recognized_json['text'] + '.'
                 else:
-                    logger.warning("Vosk не распознал текст.")
-                    return None
-        except httpx.RequestError as e:
-            logger.error(f"Ошибка запроса к Vosk API: {repr(e)}") # Используем repr(e) для более подробной информации
-            return None
-        except json.JSONDecodeError:
-            logger.error("Ошибка декодирования JSON ответа от Vosk API.")
-            return None
-        except Exception as e:
-            logger.error(f"Неизвестная ошибка при распознавании Vosk: {e}")
-            return None
+                    # Partial results are not used for final text, but can be logged for debugging
+                    pass
+        
+        final_result = rec.FinalResult()
+        final_json = json.loads(final_result)
+        if 'text' in final_json and final_json['text']:
+            recognized_text += ' ' + final_json['text'] + '.'
+        
+        return recognized_text.strip()
+
 
     @staticmethod
     async def live_recognition() -> None:
@@ -173,75 +215,74 @@ class SpeechRecognition:
                         logger.error(f"Ошибка при распознавании Google: {e}")
                         break
         elif SpeechRecognition._recognizer_type == "vosk":
-            logger.info(f"Скажите что-нибудь (Vosk)... Модель: {SpeechRecognition.vosk_model}")
-            # Для Vosk мы будем использовать sounddevice для непрерывного захвата
-            # и отправлять данные в Vosk API.
-            # Внедряем VAD (Voice Activity Detection) для определения конца речи.
+            if not SpeechRecognition._init_vosk_recognizer():
+                logger.error("Не удалось инициализировать Vosk распознаватель. Отмена live_recognition.")
+                return
 
-            vosk_live_audio_buffer = []
-            is_vosk_recording = False
-            last_sound_time_vosk = time.time()
-            recording_start_time = 0 # Время начала текущей записи
+            logger.info(f"Используется микрофон: {sr.Microphone.list_microphone_names()[SpeechRecognition.microphone_index]}")
+            logger.info("Скажите что-нибудь (Vosk)...")
+
+            # Используем sounddevice для захвата аудио в реальном времени
+            with sd.InputStream(
+                samplerate=SpeechRecognition.SAMPLE_RATE,
+                channels=1,
+                dtype='float32',
+                blocksize=SpeechRecognition.CHUNK_SIZE,
+                device=SpeechRecognition.microphone_index
+            ) as stream:
+                while SpeechRecognition.active:
+                    try:
+                        # Читаем данные из потока
+                        data, overflowed = stream.read(SpeechRecognition.CHUNK_SIZE)
+                        if overflowed:
+                            logger.warning("Переполнение буфера аудиопотока!")
+
+                        # Логируем информацию о полученных аудиоданных
+                        if data.size > 0:
+                            rms_val = np.sqrt(np.mean(data ** 2))
+                            logger.debug(f"Получены аудиоданные. Размер: {data.size}, RMS: {rms_val:.4f}")
+                            if rms_val < SpeechRecognition.SILENCE_THRESHOLD:
+                                logger.debug("Обнаружена тишина.")
+                        else:
+                            logger.debug("Получены пустые аудиоданные.")
+
+                        # Преобразуем float32 в int16 для Vosk
+                        audio_data_int16 = (data * 32767).astype(np.int16)
+                        
+                        # Передаем данные в Vosk
+                        if SpeechRecognition._vosk_rec_instance.AcceptWaveform(audio_data_int16.tobytes()):
+                            result_json = json.loads(SpeechRecognition._vosk_rec_instance.Result())
+                            if 'text' in result_json and result_json['text']:
+                                # Добавляем ucfirst для единообразия с примером
+                                recognized_text = result_json['text']
+                                if recognized_text:
+                                    recognized_text = recognized_text[:1].upper() + recognized_text[1:]
+                                await SpeechRecognition.handle_voice_message(recognized_text)
+                                logger.info(f"Vosk распознал: {recognized_text}")
+                        else:
+                            # Обработка частичных результатов (опционально)
+                            partial_result_json = json.loads(SpeechRecognition._vosk_rec_instance.PartialResult())
+                            if 'partial' in partial_result_json and partial_result_json['partial']:
+                                # Включаем логирование частичных результатов для отладки
+                                logger.debug(f"Vosk частичный: {partial_result_json['partial']}")
+                                pass
+                        
+                        await asyncio.sleep(SpeechRecognition.VOSK_PROCESS_INTERVAL) # Небольшая задержка для предотвращения перегрузки
+
+                    except Exception as e:
+                        logger.error(f"Ошибка при распознавании Vosk в реальном времени: {e}")
+                        break
             
-            # Получаем текущий цикл событий, чтобы использовать его в синхронном колбэке
-            loop = asyncio.get_event_loop()
+            # Получаем окончательный результат после завершения записи
+            final_result = SpeechRecognition._vosk_rec_instance.FinalResult()
+            final_json = json.loads(final_result)
+            if 'text' in final_json and final_json['text']:
+                recognized_text = final_json['text']
+                if recognized_text:
+                    recognized_text = recognized_text[:1].upper() + recognized_text[1:]
+                await SpeechRecognition.handle_voice_message(recognized_text)
+                logger.info(f"Vosk окончательный: {recognized_text}")
 
-            def vosk_live_callback(indata, frames, time_info, status):
-                nonlocal is_vosk_recording, last_sound_time_vosk, recording_start_time
-                if status:
-                    logger.warning(f"Vosk live callback status: {status}")
-
-                # Преобразуем indata в numpy array
-                audio_data = np.frombuffer(indata, dtype=np.float32)
-                rms = np.sqrt(np.mean(audio_data ** 2))
-                current_time = time.time()
-
-                # Проверяем, есть ли звук
-                if rms > SpeechRecognition.SILENCE_THRESHOLD:
-                    last_sound_time_vosk = current_time
-                    if not is_vosk_recording:
-                        logger.info("🟢 Начало записи (Vosk live)")
-                        is_vosk_recording = True
-                        recording_start_time = current_time # Запоминаем время начала записи
-                    vosk_live_audio_buffer.append(audio_data.copy())
-                
-                # Проверяем на тишину или максимальную длительность записи
-                should_process = False
-                if is_vosk_recording:
-                    if (current_time - last_sound_time_vosk > SpeechRecognition.SILENCE_DURATION):
-                        logger.info("🔴 Обнаружена тишина, завершение записи (Vosk live)")
-                        should_process = True
-                    elif (current_time - recording_start_time > SpeechRecognition.MAX_RECORDING_DURATION):
-                        logger.info(f"🔴 Достигнут максимальный лимит записи ({SpeechRecognition.MAX_RECORDING_DURATION} сек), завершение (Vosk live)")
-                        should_process = True
-                    else:
-                        # Продолжаем запись, если звук ниже порога, но тишина еще не достигла SILENCE_DURATION
-                        vosk_live_audio_buffer.append(audio_data.copy())
-                
-                if should_process:
-                    is_vosk_recording = False
-                    if vosk_live_audio_buffer:
-                        audio_data_to_process = np.concatenate(vosk_live_audio_buffer)
-                        vosk_live_audio_buffer.clear()
-                        # Запускаем асинхронную задачу в основном цикле событий
-                        asyncio.run_coroutine_threadsafe(SpeechRecognition.recognize_vosk(audio_data_to_process), loop)
-                elif not is_vosk_recording and vosk_live_audio_buffer: # Если не записываем и нет звука, очищаем буфер, если там что-то есть
-                    logger.info("❌ Слишком короткая запись или ложная активация, сброс (Vosk live)")
-                    vosk_live_audio_buffer.clear()
-
-            try:
-                with sd.RawInputStream(
-                        callback=vosk_live_callback,
-                        channels=1,
-                        samplerate=SpeechRecognition.SAMPLE_RATE,
-                        blocksize=SpeechRecognition.CHUNK_SIZE,
-                        dtype='float32',
-                        device=SpeechRecognition.microphone_index
-                ) as stream:
-                    while SpeechRecognition.active:
-                        await asyncio.sleep(0.1)  # Небольшая задержка для цикла
-            except Exception as e:
-                logger.critical(f"Критическая ошибка в live_recognition (Vosk): {str(e)}")
 
     @staticmethod
     async def async_audio_callback(indata):

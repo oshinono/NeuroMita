@@ -1746,7 +1746,7 @@ class ChatGUI:
                 'type': 'combobox',
                 'key': 'RECOGNIZER_TYPE',
                 # TODO Вернуть воск 'options': ["google", "vosk"],
-                'options': ["google"],
+                'options': ["google","vosk"],
                 'default': "google",
                 'command': lambda value: SpeechRecognition.set_recognizer_type(value),
                 'tooltip': _("Выберите движок распознавания речи: Google или Vosk.",
