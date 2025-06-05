@@ -8,14 +8,18 @@ from openai import OpenAI
 import re
 import importlib
 from typing import List, Dict, Any
-import os # Added for os.environ
+import os  # Added for os.environ
 
 from Logger import logger
-from characters import CrazyMita, KindMita, ShortHairMita, CappyMita, MilaMita, CreepyMita, SleepyMita, GameMaster, SpaceCartridge, DivanCartridge # Updated imports
-from character import Character # Character base
+from characters import CrazyMita, KindMita, ShortHairMita, CappyMita, MilaMita, CreepyMita, SleepyMita, GameMaster, \
+    SpaceCartridge, DivanCartridge  # Updated imports
+from character import Character  # Character base
 from utils.PipInstaller import PipInstaller
 
-from utils import SH, save_combined_messages, calculate_cost_for_combined_messages, replace_numbers_with_words # Keep utils
+from utils import SH, save_combined_messages, calculate_cost_for_combined_messages, \
+    replace_numbers_with_words  # Keep utils
+
+
 # from promptPart import PromptPart, PromptType # No longer needed
 
 
@@ -26,14 +30,14 @@ class ChatModel:
         self.pip_installer = pip_installer
         self.g4fClient = None
         self.g4f_available = False
-        self._initialize_g4f() # Keep g4f initialization
+        self._initialize_g4f()  # Keep g4f initialization
 
         self.api_key = api_key
         self.api_key_res = api_key_res
         self.api_url = api_url
         self.api_model = api_model
         self.gpt4free_model = self.gui.settings.get("gpt4free_model")
-        self.makeRequest = api_make_request # This seems to be a boolean flag
+        self.makeRequest = api_make_request  # This seems to be a boolean flag
 
         try:
             self.client = OpenAI(api_key=self.api_key, base_url=self.api_url)
@@ -43,7 +47,7 @@ class ChatModel:
             self.client = None
 
         try:
-          #  self.tokenizer = tiktoken.encoding_for_model("gpt-4o-mini")
+            #  self.tokenizer = tiktoken.encoding_for_model("gpt-4o-mini")
             self.hasTokenizer = False
         except:
             logger.info("Тиктокен не сработал( Ну и пофиг, на билдах он никогда и не работал")
@@ -59,17 +63,16 @@ class ChatModel:
         self.frequency_penalty = float(self.gui.settings.get("MODEL_FREQUENCY_PENALTY", 0.0))
         self.log_probability = float(self.gui.settings.get("MODEL_LOG_PROBABILITY", 0.0))
 
-
-
         """ Очень спорно уже """
         self.cost_input_per_1000 = 0.0432
         self.cost_response_per_1000 = 0.1728
 
-        self.memory_limit = int(self.gui.settings.get("MODEL_MESSAGE_LIMIT", 40)) # For historical messages
+        self.memory_limit = int(self.gui.settings.get("MODEL_MESSAGE_LIMIT", 40))  # For historical messages
 
         self.current_character: Character = None
         self.current_character_to_change = str(self.gui.settings.get("CHARACTER"))
         self.characters: Dict[str, Character] = {}
+
 
         # Game-specific state - these should ideally be passed to character or managed elsewhere if possible
         # For now, keeping them here as per original. DSL might need them injected into character.variables.
@@ -78,11 +81,11 @@ class ChatModel:
         self.roomMita = -1
         self.nearObjects = ""
         self.actualInfo = ""
-        
-        self.infos_to_add_to_history: List[Dict] = [] # For temporary system messages to be added to history
+
+        self.infos_to_add_to_history: List[Dict] = []  # For temporary system messages to be added to history
 
         self.init_characters()
-        self.HideAiData = True # Unused?
+        self.HideAiData = True  # Unused?
         self.max_request_attempts = int(self.gui.settings.get("MODEL_MESSAGE_ATTEMPTS_COUNT", 5))
         self.request_delay = float(self.gui.settings.get("MODEL_MESSAGE_ATTEMPTS_TIME", 0.20))
 
@@ -102,7 +105,7 @@ class ChatModel:
         except ImportError:
             logger.info("Модуль g4f не найден (при проверке). Попытка первоначальной установки...")
 
-            target_version = self.gui.settings.get("G4F_VERSION", "0.4.7.7") # Using "0.x.y.z" format
+            target_version = self.gui.settings.get("G4F_VERSION", "0.4.7.7")  # Using "0.x.y.z" format
             package_spec = f"g4f=={target_version}" if target_version != "latest" else "g4f"
 
             if self.pip_installer:
@@ -120,13 +123,13 @@ class ChatModel:
 
                     logger.info("Повторная попытка импорта и инициализации...")
                     try:
-                        from g4f.client import Client as g4fClient # Re-import
+                        from g4f.client import Client as g4fClient  # Re-import
                         logger.info("Повторный импорт g4f успешен. Попытка инициализации клиента...")
                         try:
                             self.g4fClient = g4fClient()
                             self.g4f_available = True
                             logger.info("g4fClient успешно инициализирован после установки.")
-                        except Exception as e_init_after_install: # More specific exception name
+                        except Exception as e_init_after_install:  # More specific exception name
                             logger.error(f"Ошибка при инициализации g4fClient после установки: {e_init_after_install}")
                             self.g4fClient = None
                             self.g4f_available = False
@@ -151,7 +154,6 @@ class ChatModel:
             self.g4fClient = None
             self.g4f_available = False
 
-
     def init_characters(self):
         self.crazy_mita_character = CrazyMita("Crazy", "Crazy Mita", "/speaker mita", short_name="CrazyMita", miku_tts_name="/set_person CrazyMita", silero_turn_off_video=True)
         self.kind_mita_character = KindMita("Kind", "Kind Mita", "/speaker kind", short_name="MitaKind", miku_tts_name="/set_person KindMita", silero_turn_off_video=True)
@@ -161,24 +163,23 @@ class ChatModel:
         self.sleepy_character = SleepyMita("Sleepy","Sleepy Mita", "/speaker dream", short_name="SleepyMita", miku_tts_name="/set_person SleepyMita", silero_turn_off_video=True)
         self.creepy_character = CreepyMita("Creepy","Creepy Mita", "/speaker ghost", short_name="GhostMita", miku_tts_name="/set_person GhostMita", silero_turn_off_video=True)
         
-        self.cart_space = SpaceCartridge("Cart_portal", "Cart_portal", "/speaker wheatley", short_name="Player", miku_tts_name="/set_person Player", silero_turn_off_video=True)
-        self.cart_divan = DivanCartridge("Cart_divan", "Cart_divan", "/speaker engineer", short_name="Player", miku_tts_name="/set_person Player", silero_turn_off_video=True)
+        self.cart_space = SpaceCartridge("Cart_portal", "Cart_portal", "/speaker wheatley", short_name="Player", miku_tts_name="/set_person Player", silero_turn_off_video=True,is_cartridge=True)
+        self.cart_divan = DivanCartridge("Cart_divan", "Cart_divan", "/speaker engineer", short_name="Player", miku_tts_name="/set_person Player", silero_turn_off_video=True,is_cartridge=True)
         self.GameMaster = GameMaster("GameMaster", "GameMaster", "/speaker dryad", short_name="PhoneMita", miku_tts_name="/set_person PhoneMita", silero_turn_off_video=True)
 
         self.characters = {
-            self.crazy_mita_character.name: self.crazy_mita_character,
-            self.kind_mita_character.name: self.kind_mita_character,
-            self.cappy_mita_character.name: self.cappy_mita_character,
-            self.shorthair_mita_character.name: self.shorthair_mita_character,
-            self.mila_character.name: self.mila_character,
-            self.sleepy_character.name: self.sleepy_character,
-            self.creepy_character.name: self.creepy_character,
-            self.cart_space.name: self.cart_space,
-            self.cart_divan.name: self.cart_divan,
-            self.GameMaster.name: self.GameMaster,
+            self.crazy_mita_character.char_id: self.crazy_mita_character,
+            self.kind_mita_character.char_id: self.kind_mita_character,
+            self.cappy_mita_character.char_id: self.cappy_mita_character,
+            self.shorthair_mita_character.char_id: self.shorthair_mita_character,
+            self.mila_character.char_id: self.mila_character,
+            self.sleepy_character.char_id: self.sleepy_character,
+            self.creepy_character.char_id: self.creepy_character,
+            self.cart_space.char_id: self.cart_space,
+            self.cart_divan.char_id: self.cart_divan,
+            self.GameMaster.char_id: self.GameMaster,
         }
         self.current_character = self.characters.get(self.current_character_to_change) or self.crazy_mita_character
-
 
     def get_all_mitas(self):
         logger.info(f"Available characters: {list(self.characters.keys())}")
@@ -205,7 +206,6 @@ class ChatModel:
             logger.error(f"Failed to update OpenAI client: {e}")
             self.client = None
 
-
     def generate_response(self, user_input: str, system_input: str = "", image_data: list[bytes] = None):
         if image_data is None:
             image_data = []
@@ -218,26 +218,53 @@ class ChatModel:
         if self.infos_to_add_to_history:
             llm_messages_history.extend(self.infos_to_add_to_history)
             self.infos_to_add_to_history.clear()
-            
+
         self.current_character.variables["GAME_DISTANCE"] = self.distance
-        self.current_character.variables["GAME_ROOM_PLAYER"] = self.roomPlayer
-        self.current_character.variables["GAME_ROOM_MITA"] = self.roomMita
+        self.current_character.variables["GAME_ROOM_PLAYER"] = self.get_room_name(self.roomPlayer)
+        self.current_character.variables["GAME_ROOM_MITA"] = self.get_room_name(self.roomMita)
         self.current_character.variables["GAME_NEAR_OBJECTS"] = self.nearObjects
         self.current_character.variables["GAME_ACTUAL_INFO"] = self.actualInfo
-        
-        combined_messages = self.current_character.get_full_system_setup_for_llm()
+
+        combined_messages = []
+
+        # Logic for individual system messages, moved from Character to ChatModel
+        if bool(self.gui.settings.get("SEPARATE_PROMPTS", True)):
+            # Load the main template content to extract individual file paths
+            main_template_content = ""
+            try:
+                resolved_main_template_id = self.current_character.dsl_interpreter.resolver.resolve_path(self.current_character.main_template_path_relative)
+                main_template_content = self.current_character.dsl_interpreter.resolver.load_text(resolved_main_template_id, f"main template for individual messages for {self.current_character.char_id}")
+            except Exception as e:
+                logger.error(f"Critical error loading main template {self.current_character.main_template_path_relative} for {self.current_character.char_id}: {e}", exc_info=True)
+                combined_messages.append({"role": "system", "content": f"[CRITICAL ERROR LOADING MAIN TEMPLATE FOR {self.current_character.char_id}]"})
+                # Continue to add memory and history, but main system prompt is broken
+            
+            # Extract all [<path>] placeholders from the main template content
+            file_paths_from_template = self.current_character.dsl_interpreter.placeholder_pattern.findall(main_template_content)
+            
+            for file_path_relative in file_paths_from_template:
+                try:
+                    content = self.current_character.dsl_interpreter.process_file(file_path_relative)
+                    if content and content.strip():
+                        combined_messages.append({"role": "system", "content": content})
+                except Exception as e:
+                    logger.error(f"Critical error during DSL processing for individual file {file_path_relative} for {self.current_character.char_id}: {e}", exc_info=True)
+                    combined_messages.append({"role": "system", "content": f"[ERROR PROCESSING {file_path_relative}]"})
+        else:
+            # Original logic: combine all into one main system prompt
+            combined_messages.extend(self.current_character.get_full_system_setup_for_llm())
 
         if self.current_character != self.GameMaster:
             llm_messages_history_limited = llm_messages_history[-self.memory_limit:]
         else:
             llm_messages_history_limited = llm_messages_history[-8:]
-        
+
         combined_messages.extend(llm_messages_history_limited)
 
         user_message_for_history = None
         if system_input:
             combined_messages.append({"role": "system", "content": system_input})
-        
+
         user_message_content_list = []
         if user_input:
             user_message_content_list.append({"type": "text", "text": user_input})
@@ -249,40 +276,40 @@ class ChatModel:
                     "url": f"data:image/jpeg;base64,{base64.b64encode(img_bytes).decode('utf-8')}"
                 }
             })
-        
+
         if user_message_content_list:
             user_message_for_history = {"role": "user", "content": user_message_content_list}
             combined_messages.append(user_message_for_history)
-        
+
         try:
             llm_response_content, success = self._generate_chat_response(combined_messages)
 
             if not success or not llm_response_content:
                 logger.warning("LLM generation failed or returned empty.")
-                return "..." 
+                return "..."
 
             processed_response_text = self.current_character.process_response_nlp_commands(llm_response_content)
-            
+
             # --- Start of Embedding/Command Replacer Integration ---
-            final_response_text = processed_response_text # Initialize
+            final_response_text = processed_response_text  # Initialize
             try:
                 use_command_replacer = self.gui.settings.get("USE_COMMAND_REPLACER", False)
                 # Check environment variable for default enabling
                 enable_by_default = os.environ.get("ENABLE_COMMAND_REPLACER_BY_DEFAULT", "0") == "1"
 
                 if use_command_replacer and enable_by_default:
-                    if not hasattr(self, 'model_handler'): # Changed from 'embedder'
+                    if not hasattr(self, 'model_handler'):  # Changed from 'embedder'
                         from utils.embedding_handler import EmbeddingModelHandler
                         self.model_handler = EmbeddingModelHandler()
 
                     if not hasattr(self, 'parser'):
                         from utils.command_parser import CommandParser
                         self.parser = CommandParser(model_handler=self.model_handler)
-                    
+
                     min_similarity = float(self.gui.settings.get("MIN_SIMILARITY_THRESHOLD", 0.40))
                     category_threshold = float(self.gui.settings.get("CATEGORY_SWITCH_THRESHOLD", 0.18))
-                    skip_comma = bool(self.gui.settings.get("SKIP_COMMA_PARAMETERS", True)) # Ensure bool conversion
-                    
+                    skip_comma = bool(self.gui.settings.get("SKIP_COMMA_PARAMETERS", True))  # Ensure bool conversion
+
                     logger.info(f"Attempting command replacement on: {processed_response_text[:100]}...")
                     final_response_text, _ = self.parser.parse_and_replace(
                         processed_response_text,
@@ -301,28 +328,27 @@ class ChatModel:
                 # final_response_text remains processed_response_text if error occurs
             # --- End of Embedding/Command Replacer Integration ---
 
-            assistant_message = {"role": "assistant", "content": final_response_text} # Use final_response_text
-            
-            if user_message_for_history: 
+            assistant_message = {"role": "assistant", "content": final_response_text}  # Use final_response_text
+
+            if user_message_for_history:
                 llm_messages_history.append(user_message_for_history)
-            llm_messages_history.append(assistant_message) 
-            
+            llm_messages_history.append(assistant_message)
+
             self.current_character.save_character_state_to_history(llm_messages_history)
 
             if self.current_character != self.GameMaster or bool(self.gui.settings.get("GM_VOICE")):
-                self.gui.textToTalk = self.process_text_to_voice(final_response_text) # Use final_response_text
+                self.gui.textToTalk = self.process_text_to_voice(final_response_text)  # Use final_response_text
                 self.gui.textSpeaker = self.current_character.silero_command
                 self.gui.textSpeakerMiku = self.current_character.miku_tts_name
                 self.gui.silero_turn_off_video = self.current_character.silero_turn_off_video
                 logger.info(f"TTS Text: {self.gui.textToTalk}, Speaker: {self.gui.textSpeaker}")
-            
-            self.gui.update_debug_info() 
-            return final_response_text # Return final_response_text
+
+            self.gui.update_debug_info()
+            return final_response_text  # Return final_response_text
 
         except Exception as e:
             logger.error(f"Error during LLM response generation or processing: {e}", exc_info=True)
             return f"Ошибка: {e}"
-
 
     def check_change_current_character(self):
         if not self.current_character_to_change:
@@ -337,41 +363,42 @@ class ChatModel:
             logger.warning(f"Attempted to change to unknown character: {self.current_character_to_change}")
             self.current_character_to_change = ""
 
-
     def _generate_chat_response(self, combined_messages):
         max_attempts = self.max_request_attempts
         retry_delay = self.request_delay
-        request_timeout = 45 
+        request_timeout = 45
 
         self._log_generation_start()
         for attempt in range(1, max_attempts + 1):
             logger.info(f"Generation attempt {attempt}/{max_attempts}")
             response_text = None
 
-            save_combined_messages(combined_messages, f"Attempt_{attempt}")
+            save_combined_messages(combined_messages, "SavedMessages/last_attempt_log")
 
             try:
-                if bool(self.gui.settings.get("NM_API_REQ", False)): 
+                if bool(self.gui.settings.get("NM_API_REQ", False)):
                     formatted_for_request = combined_messages
                     if bool(self.gui.settings.get("GEMINI_CASE", False)):
                         formatted_for_request = self._format_messages_for_gemini(combined_messages)
-                    
+
                     response_text = self._execute_with_timeout(
                         self._generate_request_response,
                         args=(formatted_for_request,),
                         timeout=request_timeout
                     )
-                else: 
+                else:
                     use_gpt4free_for_this_attempt = bool(self.gui.settings.get("gpt4free")) or \
-                                                 (bool(self.gui.settings.get("GPT4FREE_LAST_ATTEMPT")) and attempt >= max_attempts)
-                    
+                                                    (bool(self.gui.settings.get(
+                                                        "GPT4FREE_LAST_ATTEMPT")) and attempt >= max_attempts)
+
                     if use_gpt4free_for_this_attempt:
                         logger.info("Using gpt4free for this attempt.")
-                    elif attempt > 1 and self.api_key_res: 
+                    elif attempt > 1 and self.api_key_res:
                         logger.info("Attempting with reserve API key.")
                         self.update_openai_client(reserve_key_token=self.GetOtherKey())
-                    
-                    response_text = self._generate_openapi_response(combined_messages, use_gpt4free=use_gpt4free_for_this_attempt)
+
+                    response_text = self._generate_openapi_response(combined_messages,
+                                                                    use_gpt4free=use_gpt4free_for_this_attempt)
 
                 if response_text:
                     cleaned_response = self._clean_response(response_text)
@@ -391,10 +418,9 @@ class ChatModel:
             if attempt < max_attempts:
                 logger.info(f"Waiting {retry_delay}s before next attempt...")
                 time.sleep(retry_delay)
-        
+
         logger.error("All generation attempts failed.")
         return None, False
-
 
     def _execute_with_timeout(self, func, args=(), kwargs={}, timeout=30):
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
@@ -403,16 +429,16 @@ class ChatModel:
                 return future.result(timeout=timeout)
             except concurrent.futures.TimeoutError:
                 logger.error(f"Function {func.__name__} timed out after {timeout} seconds.")
-                raise 
+                raise
             except Exception as e:
                 logger.error(f"Exception in function {func.__name__} executed with timeout: {e}")
                 raise
 
-
     def _log_generation_start(self):
         logger.info("Preparing to generate LLM response.")
         logger.info(f"Max Response Tokens: {self.max_response_tokens}, Temperature: {self.temperature}")
-        logger.info(f"Presence Penalty: {self.presence_penalty} (Used: {bool(self.gui.settings.get('USE_MODEL_PRESENCE_PENALTY'))})")
+        logger.info(
+            f"Presence Penalty: {self.presence_penalty} (Used: {bool(self.gui.settings.get('USE_MODEL_PRESENCE_PENALTY'))})")
         logger.info(f"API URL: {self.api_url}, API Model: {self.api_model}")
         logger.info(f"g4f Enabled: {bool(self.gui.settings.get('gpt4free'))}, g4f Model: {self.gpt4free_model}")
         logger.info(f"Custom Request (NM_API_REQ): {bool(self.gui.settings.get('NM_API_REQ', False))}")
@@ -420,18 +446,16 @@ class ChatModel:
             logger.info(f"  Custom Request Model (NM_API_MODEL): {self.gui.settings.get('NM_API_MODEL')}")
             logger.info(f"  Gemini Case for Custom Req: {bool(self.gui.settings.get('GEMINI_CASE', False))}")
 
-
     def _format_messages_for_gemini(self, combined_messages):
         formatted_messages = []
         for i, msg in enumerate(combined_messages):
             if msg["role"] == "system":
                 formatted_messages.append({"role": "user", "content": f"[System Instruction]: {msg['content']}"})
             elif msg["role"] == "assistant":
-                 formatted_messages.append({"role": "model", "content": msg['content']})
-            else: # user
+                formatted_messages.append({"role": "model", "content": msg['content']})
+            else:  # user
                 formatted_messages.append(msg)
         return formatted_messages
-
 
     def _generate_request_response(self, formatted_messages):
         try:
@@ -445,7 +469,6 @@ class ChatModel:
             logger.error(f"Error in _generate_request_response dispatcher: {str(e)}", exc_info=True)
             return None
 
-
     def _generate_openapi_response(self, combined_messages, use_gpt4free=False):
         target_client = None
         model_to_use = ""
@@ -455,12 +478,12 @@ class ChatModel:
                 logger.error("gpt4free selected, but client is not available.")
                 return None
             target_client = self.g4fClient
-            model_to_use = self.gui.settings.get("gpt4free_model", "gpt-3.5-turbo") 
+            model_to_use = self.gui.settings.get("gpt4free_model", "gpt-3.5-turbo")
             logger.info(f"Using g4f client with model: {model_to_use}")
         else:
             if not self.client:
                 logger.info("OpenAI client not initialized. Attempting to re-initialize.")
-                self.update_openai_client() 
+                self.update_openai_client()
                 if not self.client:
                     logger.error("OpenAI client is not available after re-initialization attempt.")
                     return None
@@ -470,12 +493,13 @@ class ChatModel:
 
         try:
             self.change_last_message_to_user_for_gemini(model_to_use, combined_messages)
-            
+
             final_params = self.get_final_params(model_to_use, combined_messages)
-            
-            logger.info(f"Requesting completion from {model_to_use} with temp={final_params.get('temperature')}, max_tokens={final_params.get('max_tokens')}")
+
+            logger.info(
+                f"Requesting completion from {model_to_use} with temp={final_params.get('temperature')}, max_tokens={final_params.get('max_tokens')}")
             completion = target_client.chat.completions.create(**final_params)
-            
+
             if completion and completion.choices:
                 response_content = completion.choices[0].message.content
                 logger.info("Completion successful.")
@@ -486,18 +510,16 @@ class ChatModel:
                 return None
         except Exception as e:
             logger.error(f"Error during OpenAI/g4f API call: {str(e)}", exc_info=True)
-            if hasattr(e, 'response') and e.response: 
-                 logger.error(f"API Error details: Status={e.response.status_code}, Body={e.response.text}")
+            if hasattr(e, 'response') and e.response:
+                logger.error(f"API Error details: Status={e.response.status_code}, Body={e.response.text}")
             return None
-
 
     def change_last_message_to_user_for_gemini(self, api_model, combined_messages):
         if combined_messages and ("gemini" in api_model.lower() or "gemma" in api_model.lower()) and \
-           combined_messages[-1]["role"] == "system":
+                combined_messages[-1]["role"] == "system":
             logger.info(f"Adjusting last message for {api_model}: system -> user with [SYSTEM INFO] prefix.")
             combined_messages[-1]["role"] = "user"
             combined_messages[-1]["content"] = f"[SYSTEM INFO] {combined_messages[-1]['content']}"
-
 
     def try_print_error(self, completion_or_error):
         logger.warning("Attempting to print error details from API response/error object.")
@@ -507,33 +529,32 @@ class ChatModel:
 
         if hasattr(completion_or_error, 'error') and completion_or_error.error:
             error_data = completion_or_error.error
-            logger.warning(f"API Error: Code={getattr(error_data, 'code', 'N/A')}, Message='{getattr(error_data, 'message', 'N/A')}', Type='{getattr(error_data, 'type', 'N/A')}'")
+            logger.warning(
+                f"API Error: Code={getattr(error_data, 'code', 'N/A')}, Message='{getattr(error_data, 'message', 'N/A')}', Type='{getattr(error_data, 'type', 'N/A')}'")
             if hasattr(error_data, 'param') and error_data.param:
                 logger.warning(f"  Param: {error_data.param}")
         elif isinstance(completion_or_error, dict) and 'error' in completion_or_error:
-             error_data = completion_or_error['error']
-             logger.warning(f"API Error (from dict): {error_data}")
-        elif hasattr(completion_or_error, 'message'): 
-             logger.warning(f"API Error: {completion_or_error.message}")
+            error_data = completion_or_error['error']
+            logger.warning(f"API Error (from dict): {error_data}")
+        elif hasattr(completion_or_error, 'message'):
+            logger.warning(f"API Error: {completion_or_error.message}")
         else:
             logger.warning(f"Could not parse detailed error. Raw object: {str(completion_or_error)[:500]}")
-
 
     def _clean_response(self, response_text: str) -> str:
         if not isinstance(response_text, str):
             logger.warning(f"Clean response expected string, got {type(response_text)}. Returning as is.")
             return response_text
-        
+
         cleaned = response_text
         if cleaned.startswith("```json\n") and cleaned.endswith("\n```"):
             cleaned = cleaned[len("```json\n"):-len("\n```")]
         elif cleaned.startswith("```\n") and cleaned.endswith("\n```"):
             cleaned = cleaned[len("```\n"):-len("\n```")]
-        elif cleaned.startswith("```") and cleaned.endswith("```"): 
+        elif cleaned.startswith("```") and cleaned.endswith("```"):
             cleaned = cleaned[3:-3]
-            
-        return cleaned.strip()
 
+        return cleaned.strip()
 
     # def generate_request_gemini(self, combined_messages):
     #     params_for_gemini = self.get_params(model="gemini-pro")
@@ -561,7 +582,7 @@ class ChatModel:
     #              api_url_with_key += f"?key={self.api_key}"
 
     #     logger.info(f"Sending request to Gemini API: {api_url_with_key}")
-        
+
     #     try:
     #         response = requests.post(api_url_with_key, headers=headers, json=data, timeout=40)
     #         response.raise_for_status() 
@@ -583,7 +604,6 @@ class ChatModel:
     #         logger.error(f"Error during Gemini API request: {str(e)}", exc_info=True)
     #         return None
 
-
     # def generate_request_common(self, combined_messages):
     #     model_name = self.gui.settings.get("NM_API_MODEL", self.api_model)
     #     params_for_common = self.get_params(model=model_name)
@@ -602,11 +622,11 @@ class ChatModel:
     #         headers["Authorization"] = f"Bearer {self.api_key}"
 
     #     logger.info(f"Sending request to common API: {self.api_url} with model: {model_name}")
-        
+
     #     try:
     #         response = requests.post(self.api_url, headers=headers, json=data, timeout=40)
     #         response.raise_for_status()
-            
+
     #         response_data = response.json()
     #         if response_data.get("choices"):
     #             generated_text = response_data["choices"][0].get("message", {}).get("content", "")
@@ -622,9 +642,8 @@ class ChatModel:
     #         logger.error(f"Error during common API request: {str(e)}", exc_info=True)
     #         return None
 
-
     def _get_provider_key(self, model_name: str) -> str:
-        if not model_name: return 'openai' 
+        if not model_name: return 'openai'
         model_name_lower = model_name.lower()
         if 'gpt-4' in model_name_lower or 'gpt-3.5' in model_name_lower: return 'openai'
         if 'gemini' in model_name_lower or 'gemma' in model_name_lower: return 'gemini'
@@ -633,11 +652,10 @@ class ChatModel:
         logger.info(f"Unknown provider for model '{model_name}', defaulting to 'openai' parameter naming conventions.")
         return 'openai'
 
-
     # def get_params(self, model: str = None) -> Dict[str, Any]:
     #     current_model_name = model if model is not None else self.api_model
     #     provider_key = self._get_provider_key(current_model_name)
-        
+
     #     params: Dict[str, Any] = {}
 
     #     if self.temperature is not None:
@@ -654,7 +672,7 @@ class ChatModel:
     #             params['presence_penalty'] = self.presence_penalty
     #         elif provider_key == 'gemini': 
     #             logger.info(f"Presence penalty not directly supported by Gemini config for model {current_model_name}. Skipping.")
-        
+
     #     params = self.remove_unsupported_params(current_model_name, params)
     #     return params
 
@@ -672,7 +690,6 @@ class ChatModel:
     #         if isinstance(value, str):
     #             params[key] = value.replace("'\x00", "") 
 
-
     # def remove_unsupported_params(self,model,params):
     #     """Тут удаляем все лишние параметры"""
     #     if model in ("gemini-2.5-pro-exp-03-25","gemini-2.5-flash-preview-04-17"):
@@ -682,7 +699,6 @@ class ChatModel:
     #         # For now, keeping this as it was in the provided code.
     #     return params
 
-
     def process_text_to_voice(self, text_to_speak: str) -> str:
         if not isinstance(text_to_speak, str):
             logger.warning(f"process_text_to_voice expected string, got {type(text_to_speak)}. Converting to string.")
@@ -690,21 +706,20 @@ class ChatModel:
 
         clean_text = re.sub(r"<[^>]+>.*?</[^>]+>", "", text_to_speak, flags=re.DOTALL)
         clean_text = re.sub(r"<[^>]+>", "", clean_text)
-        
+
         try:
             clean_text = replace_numbers_with_words(clean_text)
-        except NameError: 
+        except NameError:
             logger.debug("replace_numbers_with_words utility not found or used.")
-            pass 
-            
+            pass
+
         if not clean_text.strip():
-            clean_text = "..." 
+            clean_text = "..."
             logger.info("TTS text was empty after cleaning, using default '...'")
-            
+
         return clean_text.strip()
 
-
-    def reload_promts(self): 
+    def reload_promts(self):
         logger.info("Reloading current character data.")
         if self.current_character:
             self.current_character.reload_character_data()
@@ -718,27 +733,28 @@ class ChatModel:
         logger.info(f"Queued temporary system info: {content[:100]}...")
 
     #region TokensCounting
-    def calculate_cost(self, user_input_text: str): 
+    def calculate_cost(self, user_input_text: str):
         if not self.hasTokenizer:
             logger.warning("Tokenizer not available, cannot calculate cost accurately.")
             return 0, 0.0
-        
+
         temp_messages_for_costing = []
         if self.current_character:
             history_data = self.current_character.history_manager.load_history()
             temp_messages_for_costing.extend(history_data.get("messages", []))
-        
+
         temp_messages_for_costing.append({"role": "user", "content": user_input_text})
-        
+
         token_count = self.count_tokens(temp_messages_for_costing)
-        cost = (token_count / 1000) * self.cost_input_per_1000 
-        
-        logger.info(f"Estimated token count for input '{user_input_text[:50]}...': {token_count}, Estimated cost: {cost:.5f}")
+        cost = (token_count / 1000) * self.cost_input_per_1000
+
+        logger.info(
+            f"Estimated token count for input '{user_input_text[:50]}...': {token_count}, Estimated cost: {cost:.5f}")
         return token_count, cost
 
     def count_tokens(self, messages_list: List[Dict]) -> int:
         if not self.hasTokenizer:
-            return 0 
+            return 0
 
         total_tokens = 0
         for msg in messages_list:
@@ -746,33 +762,36 @@ class ChatModel:
                 try:
                     total_tokens += len(self.tokenizer.encode(msg["content"]))
                 except Exception as e:
-                    logger.warning(f"Error encoding content for token counting: {e}. Content snippet: {msg['content'][:50]}")
+                    logger.warning(
+                        f"Error encoding content for token counting: {e}. Content snippet: {msg['content'][:50]}")
         return total_tokens
+
     #endregion
 
-    def GetOtherKey(self) -> str | None: 
+    def GetOtherKey(self) -> str | None:
         all_keys = []
-        if self.api_key: 
+        if self.api_key:
             all_keys.append(self.api_key)
-        
+
         reserve_keys_str = self.gui.settings.get("NM_API_KEY_RES", "")
         if reserve_keys_str:
             all_keys.extend([key.strip() for key in reserve_keys_str.split() if key.strip()])
-        
+
         seen = set()
         unique_keys = [x for x in all_keys if not (x in seen or seen.add(x))]
 
         if not unique_keys:
             logger.warning("No API keys configured (main or reserve).")
             return None
-        
+
         if len(unique_keys) == 1:
-            self.last_key = 0 
+            self.last_key = 0
             return unique_keys[0]
         self.last_key = (self.last_key + 1) % len(unique_keys)
         selected_key = unique_keys[self.last_key]
-        
-        logger.info(f"Selected API key index: {self.last_key} (masked: {SH(selected_key)}) from {len(unique_keys)} unique keys.")
+
+        logger.info(
+            f"Selected API key index: {self.last_key} (masked: {SH(selected_key)}) from {len(unique_keys)} unique keys.")
         return selected_key
 
     def _format_multimodal_content_for_gemini(self, message_content):
@@ -784,13 +803,14 @@ class ChatModel:
                     parts.append({"text": item["text"]})
                 elif item["type"] == "image_url":
                     # Gemini API ожидает base64-кодированные изображения
-                    parts.append({"inline_data": {"mime_type": "image/jpeg", "data": item["image_url"]["url"].split(',')[1]}})
-        else: # Если content - это просто строка (старый формат)
+                    parts.append(
+                        {"inline_data": {"mime_type": "image/jpeg", "data": item["image_url"]["url"].split(',')[1]}})
+        else:  # Если content - это просто строка (старый формат)
             parts.append({"text": message_content})
         return parts
 
     # region невошедшие (из старых версий, но могут быть полезны или заменены)
-    def get_room_name(self, room_id): # This seems generally useful, kept.
+    def get_room_name(self, room_id):  # This seems generally useful, kept.
         room_names = {
             0: "Кухня",
             1: "Зал",
@@ -799,7 +819,7 @@ class ChatModel:
             4: "Подвал"
         }
         return room_names.get(room_id, "?")
-    
+
     # This method was in the "невошедшие" section of V1/V3 but has a different signature than add_temporary_system_info.
     # The current `add_temporary_system_info` which uses `self.infos_to_add_to_history` is the primary mechanism in the new system.
     def add_temporary_system_message(self, messages: List[Dict], content: str):
@@ -852,8 +872,8 @@ class ChatModel:
         }
 
         logger.info("Отправляю запрос к Gemini.")
-        logger.debug(f"Отправляемые данные (Gemini): {data}") # Добавляем логирование содержимого
-        save_combined_messages(data, "Gem2")
+        logger.debug(f"Отправляемые данные (Gemini): {data}")  # Добавляем логирование содержимого
+        save_combined_messages(data, "SavedMessages/last_gemini_log")
         response = requests.post(self.api_url, headers=headers, json=data)
 
         if response.status_code == 200:
@@ -865,7 +885,7 @@ class ChatModel:
         else:
             logger.error(f"Ошибка: {response.status_code}, {response.text}")
             return None
-    
+
     def generate_request_common(self, combined_messages):
         data = {
             "model": self.gui.settings.get("NM_API_MODEL"),
@@ -885,8 +905,8 @@ class ChatModel:
         }
 
         logger.info("Отправляю запрос к RequestCommon.")
-        logger.debug(f"Отправляемые данные (RequestCommon): {data}") # Добавляем логирование содержимого
-        save_combined_messages(data, "RequestCommon")
+        logger.debug(f"Отправляемые данные (RequestCommon): {data}")  # Добавляем логирование содержимого
+        save_combined_messages(data, "SavedMessages/last_request_common_log")
         response = requests.post(self.api_url, headers=headers, json=data)
 
         if response.status_code == 200:
@@ -898,7 +918,7 @@ class ChatModel:
         else:
             logger.error(f"Ошибка: {response.status_code}, {response.text}")
             return None
-        
+
     def get_params(self, model=None):
         current_model = model if model is not None else self.api_model
         provider_key = self._get_provider_key(current_model)
@@ -932,7 +952,7 @@ class ChatModel:
 
         if bool(self.gui.settings.get("USE_MODEL_LOG_PROBABILITY")) and self.log_probability is not None:
             if provider_key == 'openai' or provider_key == 'deepseek':
-                params['logprobs'] = self.log_probability # OpenAI/DeepSeek
+                params['logprobs'] = self.log_probability  # OpenAI/DeepSeek
             # Gemini не имеет прямого аналога logprobs в том же виде
 
         # Добавляем top_k, top_p и thought_process, если они заданы
@@ -959,10 +979,10 @@ class ChatModel:
         #     elif provider_key == 'gemini': params['gemini_name'] = self.some_other_param
         #     # и т.д.
 
-        params = self.remove_unsupported_params(current_model,params)
+        params = self.remove_unsupported_params(current_model, params)
 
         return params
-    
+
     def get_final_params(self, model, messages):
         """Модель, сообщения и параметры"""
         final_params = {
@@ -974,18 +994,17 @@ class ChatModel:
         self.clear_endline_sim(final_params)
 
         return final_params
-    
-    def clear_endline_sim(self,params):
+
+    def clear_endline_sim(self, params):
         for key, value in params.items():
             if isinstance(value, str):
                 params[key] = value.replace("'\x00", "").replace("\x00", "")
 
-    def remove_unsupported_params(self,model,params):
+    def remove_unsupported_params(self, model, params):
         """Тут удаляем все лишние параметры"""
-        if model in ("gemini-2.5-pro-exp-03-25","gemini-2.5-flash-preview-04-17"):
+        if model in ("gemini-2.5-pro-exp-03-25", "gemini-2.5-flash-preview-04-17"):
             params.pop("presencePenalty", None)
         return params
-
 
     def process_commands(self, response, messages):
         """
@@ -1077,20 +1096,6 @@ class ChatModel:
             "content": content
         }
         messages.append(system_message)
-
-    def add_temporary_system_info(self, content):
-        """
-        Добавляет одноразовое системное сообщение в список сообщений.
-
-        :param messages: Список сообщений, в который добавляется системное сообщение.
-        :param content: Текст системного сообщения.
-        """
-        system_info = {
-            "role": "system",
-            "content": content
-        }
-        self.infos.append(system_info)
-        #self.current_character.add_message_to_history(system_info)
 
     #region TokensCounting
     def calculate_cost(self, user_input):

@@ -1,3 +1,4 @@
+import base64
 import json
 import socket
 from datetime import datetime
@@ -42,15 +43,26 @@ class ChatServer:
             self.client_socket, addr = self.server_socket.accept()
             #logger.info(f"Подключен {addr}")
 
-            received_text = self.client_socket.recv(32000).decode("utf-8")
+            # Чтение данных по частям, чтобы обрабатывать большие сообщения (например, с изображениями)
+            received_data = b""
+            while True:
+                chunk = self.client_socket.recv(65536)  # Увеличиваем буфер для чтения
+                if not chunk:
+                    break
+                received_data += chunk
+                # Простая эвристика для определения конца JSON.
+                # В более надежной системе лучше передавать размер данных.
+                if b"}" in chunk and received_data.count(b"{") == received_data.count(b"}"):
+                    break
+            
+            received_text = received_data.decode("utf-8")
 
             # Логируем полученные данные
             #logger.info(f"Получено: {received_text}")
 
-            # Проверяем, корректно ли закрыт JSON (простая проверка)
             # Валидация JSON структуры
-            if not received_text.strip().endswith("}"):
-                logger.error("Ошибка: JSON оборван")
+            if not received_text.strip().endswith("}") or not received_text.strip().startswith("{"):
+                logger.error("Ошибка: JSON оборван или некорректен")
                 return False
             # Парсинг JSON данных
             try:
@@ -100,6 +112,17 @@ class ChatServer:
 
             self.gui.dialog_active = bool(message_data.get("dialog_active", False))
 
+            # Новое: извлечение данных изображения
+            image_base64_list = message_data.get("image_base64_list", [])
+            decoded_image_data = []
+            if image_base64_list:
+                for base64_str in image_base64_list:
+                    try:
+                        decoded_image_data.append(base64.b64decode(base64_str))
+                    except Exception as e:
+                        logger.error(f"Ошибка декодирования Base64 изображения: {e}")
+                        # Можно пропустить некорректное изображение или вернуть ошибку
+
             if system_info != "-":
                 logger.info("Добавил систем инфо " + system_info)
                 self.chat_model.add_temporary_system_info(system_info)
@@ -111,7 +134,7 @@ class ChatServer:
                 if system_message != "-":
                     logger.info(f"Получено system_message {system_message} id {message_id}")
                     self.gui.id_sound = message_id
-                    response = self.generate_response("", system_message)
+                    response = self.generate_response("", system_message, decoded_image_data)
                     self.gui.insertDialog("", response)
                 elif self.messages_to_say:
                     response = self.messages_to_say.pop(0)
@@ -120,14 +143,15 @@ class ChatServer:
                 date_now = datetime.datetime.now().replace(microsecond=0)
                 self.gui.id_sound = message_id
                 response = self.generate_response("",
-                                                  f"Время {date_now}, Игрок долго молчит( Ты можешь что-то сказать или предпринять")
+                                                  f"Время {date_now}, Игрок долго молчит( Ты можешь что-то сказать или предпринять",
+                                                  decoded_image_data)
                 self.gui.insertDialog("", response)
                 logger.info("Отправлено Мите на озвучку: " + response)
             else:
                 logger.info(f"Получено message id {message_id}")
                 # Если игрок отправил внутри игры, message его
                 self.gui.id_sound = message_id
-                response = self.generate_response(message, "")
+                response = self.generate_response(message, "", decoded_image_data)
                 #self.gui.insertDialog(message,response)
                 logger.info("Отправлено Мите на озвучку: " + response)
 
@@ -194,13 +218,15 @@ class ChatServer:
             if self.client_socket:
                 self.client_socket.close()
 
-    def generate_response(self, input_text, system_input_text):
+    def generate_response(self, input_text, system_input_text, image_data: list[bytes] = None):
         """Генерирует текст с помощью модели."""
+        if image_data is None:
+            image_data = []
         try:
 
             self.gui.waiting_answer = True
 
-            response = self.chat_model.generate_response(input_text, system_input_text)
+            response = self.chat_model.generate_response(input_text, system_input_text, image_data)
 
             if input_text != "":
                 self.gui.insertDialog(input_text, response, system_input_text)
