@@ -10,3 +10,4 @@
 [<Context/World.txt>]
 [<Main/player.txt>]
 [<Structural/VariablesEffects.txt>]
+[<../Common/CommonContext.script>]

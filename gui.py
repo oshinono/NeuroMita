@@ -1710,7 +1710,7 @@ class ChatGUI:
                 'default': "google",
                 'command': lambda value: SpeechRecognition.set_recognizer_type(value),
                 'tooltip': _("Выберите движок распознавания речи: Google или Vosk.", "Select speech recognition engine: Google or Vosk."),
-                'command': self.update_vosk_model_visibility
+                #'command': self.update_vosk_model_visibility
             },
             # {
             #     'label': _("Модель Vosk", "Vosk Model"),
