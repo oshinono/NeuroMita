@@ -17,7 +17,7 @@ from vosk import Model, KaldiRecognizer, SetLogLevel
 import io
 
 # You can set log level to -1 to disable debug messages
-SetLogLevel(0) # Возвращено к 0
+SetLogLevel(1) # Возвращено к 0
 
 class AudioState:
     def __init__(self):
@@ -44,10 +44,11 @@ class SpeechRecognition:
     microphone_index = 0
     active = True
     _recognizer_type = "google"  # 'google' или 'vosk'
-    vosk_model = "vosk-model-ru-0.10" #vosk-model-small-ru
+   # vosk_model = "vosk-model-ru-0.10" #vosk-model-small-ru
+    vosk_model = "vosk-model-small-ru-0.22"
 
-    SAMPLE_RATE = 44000
-    CHUNK_SIZE = 2048 # Увеличено для уменьшения переполнения буфера
+    SAMPLE_RATE = 32000
+    CHUNK_SIZE = 1024 # Увеличено для уменьшения переполнения буфера
     TIMEOUT_MESSAGE = True
     SILENCE_THRESHOLD = 0.02  # Порог тишины
     SILENCE_DURATION = 4  # Длительность тишины для завершения записи
@@ -58,7 +59,7 @@ class SpeechRecognition:
     BUFFER_TIMEOUT = 0.05
     VOSK_PROCESS_INTERVAL = 0.3 # Увеличено для уменьшения переполнения буфера
     _text_lock = Lock()
-    _text_buffer = deque(maxlen=10)  # Храним последние 10 фраз
+    _text_buffer = deque(maxlen=15)  # Храним последние 10 фраз
     _current_text = ""
     _last_delimiter = ". "
 
