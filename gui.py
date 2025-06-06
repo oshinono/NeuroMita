@@ -227,7 +227,7 @@ class ChatGUI:
         self.last_captured_frame = None
         self.image_request_thread = None
         self.image_request_running = False
-        self.last_image_request_time = 0
+        self.last_image_request_time = time.time()
         self.image_request_timer_running = False
 
     def start_asyncio_loop(self):
@@ -390,7 +390,7 @@ class ChatGUI:
                         image_data.extend(frames)
                         logger.info(f"Захвачено {len(frames)} кадров для периодической отправки.")
                     else:
-                        logger.info("Анализ экрана включен, но кадры не готовы или история пуста для периодической отправки.")
+                        ...#logger.info("Анализ экрана включен, но кадры не готовы или история пуста для периодической отправки.")
 
                 if image_data:
                     # Отправляем запрос только с изображением (без текста)
@@ -400,7 +400,7 @@ class ChatGUI:
                     else:
                         logger.error("Ошибка: Цикл событий не готов для периодической отправки изображений.")
                 else:
-                    logger.warning("Нет изображений для периодической отправки.")
+                    ...#logger.warning("Нет изображений для периодической отправки.")
 
 
         # --- Остальная часть функции без изменений (обработка микрофона) ---
