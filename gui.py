@@ -380,10 +380,12 @@ class ChatGUI:
             current_time = time.time()
             interval = float(self.settings.get("IMAGE_REQUEST_INTERVAL", 20.0))
             if current_time - self.last_image_request_time >= interval:
-                logger.info(f"Отправка периодического запроса с изображением ({current_time - self.last_image_request_time}/{interval} сек).")
+
                 # Захватываем изображение
                 image_data = []
                 if self.settings.get("ENABLE_SCREEN_ANALYSIS", False):
+                    logger.info(
+                        f"Отправка периодического запроса с изображением ({current_time - self.last_image_request_time}/{interval} сек).")
                     history_limit = int(self.settings.get("SCREEN_CAPTURE_HISTORY_LIMIT", 1))
                     frames = self.screen_capture_instance.get_recent_frames(history_limit)
                     if frames:
@@ -392,15 +394,15 @@ class ChatGUI:
                     else:
                         ...#logger.info("Анализ экрана включен, но кадры не готовы или история пуста для периодической отправки.")
 
-                if image_data:
-                    # Отправляем запрос только с изображением (без текста)
-                    if self.loop and self.loop.is_running():
-                        asyncio.run_coroutine_threadsafe(self.async_send_message(user_input="", system_input="", image_data=image_data), self.loop)
-                        self.last_image_request_time = current_time
+                    if image_data:
+                        # Отправляем запрос только с изображением (без текста)
+                        if self.loop and self.loop.is_running():
+                            asyncio.run_coroutine_threadsafe(self.async_send_message(user_input="", system_input="", image_data=image_data), self.loop)
+                            self.last_image_request_time = current_time
+                        else:
+                            logger.error("Ошибка: Цикл событий не готов для периодической отправки изображений.")
                     else:
-                        logger.error("Ошибка: Цикл событий не готов для периодической отправки изображений.")
-                else:
-                    ...#logger.warning("Нет изображений для периодической отправки.")
+                        ...#logger.warning("Нет изображений для периодической отправки.")
 
 
         # --- Остальная часть функции без изменений (обработка микрофона) ---
