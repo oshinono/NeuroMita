@@ -182,3 +182,4 @@ ffmpeg_download_temp.zip
 web/vtt/models/*
 /SpeechRecognition/Models
 /Logs
+/SpeechRecognitionModels/Vosk
