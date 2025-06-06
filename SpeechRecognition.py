@@ -1,25 +1,19 @@
 import time
-from io import BytesIO
 import asyncio
-import logging
-import soundfile as sf
-import numpy as np
-import speech_recognition as sr
-import sounddevice as sd
+import json
+import sys
+import os
+import wave
 from collections import deque
 from threading import Lock
-from Logger import logger
-import httpx
-import json
-import wave
-import sys
-from vosk import Model, KaldiRecognizer, SetLogLevel
-import io
+from io import BytesIO
 
-# You can set log level to -1 to disable debug messages
-SetLogLevel(1) # Возвращено к 0
+# Используем стандартный логгер
+from Logger import logger
+
 
 class AudioState:
+    """Простой класс для хранения состояния аудио, не требует внешних библиотек."""
     def __init__(self):
         self.is_recording = False
         self.audio_buffer = []
@@ -32,363 +26,455 @@ class AudioState:
     async def add_to_buffer(self, data):
         async with self.lock:
             if len(self.audio_buffer) >= self.max_buffer_size:
-                self.audio_buffer = self.audio_buffer[-self.max_buffer_size // 2:]  # Сохраняем последние 50%
+                self.audio_buffer = self.audio_buffer[-self.max_buffer_size // 2:]
             self.audio_buffer.append(data.copy())
-
 
 audio_state = AudioState()
 
 
 class SpeechRecognition:
-    user_input = ""
+    # --- Настройки ---
     microphone_index = 0
     active = True
-    _recognizer_type = "google"  # 'google' или 'vosk'
-   # vosk_model = "vosk-model-ru-0.10" #vosk-model-small-ru
+    _recognizer_type = "vosk"  # 'google', 'vosk' или 'gigaam'
     vosk_model = "vosk-model-small-ru-0.22"
+    gigaam_model = "v2_rnnt"  # Модель для GigaAM
 
-    SAMPLE_RATE = 32000
-    CHUNK_SIZE = 1024 # Увеличено для уменьшения переполнения буфера
-    TIMEOUT_MESSAGE = True
-    SILENCE_THRESHOLD = 0.02  # Порог тишины
-    SILENCE_DURATION = 4  # Длительность тишины для завершения записи
-    MAX_RECORDING_DURATION = 15 # Максимальная длительность записи (сек)
-    SILENCE_TIMEOUT = 2.0
-    MIN_RECORDING = 1.0
-    MIN_RECORDING_DURATION = 1  # Минимальная длительность записи
-    BUFFER_TIMEOUT = 0.05
-    VOSK_PROCESS_INTERVAL = 0.3 # Увеличено для уменьшения переполнения буфера
+    # Настройки для VAD-методов (Vosk, GigaAM)
+    VOSK_SAMPLE_RATE = 16000
+    CHUNK_SIZE = 512
+    VAD_THRESHOLD = 0.5
+    VAD_SILENCE_TIMEOUT_SEC = 1.0
+    VAD_POST_SPEECH_DELAY_SEC = 0.2
+    VAD_PRE_BUFFER_DURATION_SEC = 0.3
+
+    FAILED_AUDIO_DIR = "FailedAudios"
+
+    # --- Внутреннее состояние и буферы ---
     _text_lock = Lock()
-    _text_buffer = deque(maxlen=15)  # Храним последние 10 фраз
+    _text_buffer = deque(maxlen=15)
     _current_text = ""
-    _last_delimiter = ". "
+    _is_processing_audio = asyncio.Lock()
+    _is_running = False
+
+    # --- Переменные для ленивой загрузки библиотек и функций ---
+    _torch = None
+    _sd = None
+    _np = None
+    _sr = None
+    _vosk_Model = None
+    _vosk_KaldiRecognizer = None
+    _vosk_SetLogLevel = None
+    _silero_vad_loader = None
+    _gigaam = None  # Для модуля gigaam
+
+    # --- Переменные для хранения инициализированных объектов ---
+    _vosk_model_instance = None
+    _vosk_rec_instance = None
+    _silero_vad_model = None
+    _gigaam_model_instance = None  # Для модели gigaam
+
+    @staticmethod
+    def _init_dependencies():
+        """Выполняет JIT-импорт всех необходимых библиотек."""
+        if SpeechRecognition._recognizer_type == 'vosk':
+            try:
+                if SpeechRecognition._torch is None:
+                    import torch
+                    SpeechRecognition._torch = torch
+                if SpeechRecognition._sd is None:
+                    import sounddevice as sd
+                    SpeechRecognition._sd = sd
+                if SpeechRecognition._np is None:
+                    import numpy as np
+                    SpeechRecognition._np = np
+                
+                if SpeechRecognition._vosk_Model is None:
+                    from vosk import Model, KaldiRecognizer, SetLogLevel
+                    SpeechRecognition._vosk_Model = Model
+                    SpeechRecognition._vosk_KaldiRecognizer = KaldiRecognizer
+                    SpeechRecognition._vosk_SetLogLevel = SetLogLevel
+                    SpeechRecognition._vosk_SetLogLevel(-1)
+                
+                if SpeechRecognition._silero_vad_loader is None:
+                    from silero_vad import load_silero_vad
+                    SpeechRecognition._silero_vad_loader = load_silero_vad
+                return True
+            except ImportError as e:
+                logger.critical(f"Критическая ошибка: не удалось импортировать библиотеку: {e}. Установите 'torch', 'sounddevice', 'numpy', 'vosk' и 'silero-vad'.")
+                return False
+
+        elif SpeechRecognition._recognizer_type == 'gigaam':
+            try:
+                # Общие зависимости для VAD
+                if SpeechRecognition._torch is None:
+                    import torch
+                    SpeechRecognition._torch = torch
+                if SpeechRecognition._sd is None:
+                    import sounddevice as sd
+                    SpeechRecognition._sd = sd
+                if SpeechRecognition._np is None:
+                    import numpy as np
+                    SpeechRecognition._np = np
+                if SpeechRecognition._silero_vad_loader is None:
+                    from silero_vad import load_silero_vad
+                    SpeechRecognition._silero_vad_loader = load_silero_vad
+                
+                # Зависимость GigaAM
+                if SpeechRecognition._gigaam is None:
+                    import gigaam
+                    SpeechRecognition._gigaam = gigaam
+                return True
+            except ImportError as e:
+                logger.critical(f"Критическая ошибка: не удалось импортировать библиотеку: {e}. Установите 'torch', 'sounddevice', 'numpy', 'silero-vad' и 'gigaam'.")
+                return False
+
+        elif SpeechRecognition._recognizer_type == 'google':
+            try:
+                if SpeechRecognition._sr is None:
+                    import speech_recognition as sr
+                    SpeechRecognition._sr = sr
+                return True
+            except ImportError as e:
+                logger.critical(f"Критическая ошибка: не удалось импортировать 'speech_recognition': {e}.")
+                return False
+        return False
 
     @staticmethod
     def set_recognizer_type(recognizer_type: str):
-        if recognizer_type in ["google", "vosk"]:
+        if recognizer_type in ["google", "vosk", "gigaam"]:
             SpeechRecognition._recognizer_type = recognizer_type
             logger.info(f"Тип распознавателя установлен на: {recognizer_type}")
         else:
             logger.warning(f"Неизвестный тип распознавателя: {recognizer_type}. Используется 'google'.")
 
-
     @staticmethod
     def receive_text() -> str:
-        """Получение и сброс текста (синхронный метод)"""
         with SpeechRecognition._text_lock:
             result = " ".join(SpeechRecognition._text_buffer).strip()
             SpeechRecognition._text_buffer.clear()
             SpeechRecognition._current_text = ""
-            #logger.debug(f"Returned text: {result}")
             return result
 
     @staticmethod
     def list_microphones():
-        return sr.Microphone.list_microphone_names()
+        if SpeechRecognition._sd is None:
+            try:
+                import sounddevice as sd
+                SpeechRecognition._sd = sd
+            except ImportError:
+                logger.error("Библиотека 'sounddevice' не найдена для вывода списка микрофонов.")
+                return ["Ошибка: библиотека sounddevice не установлена"]
+        
+        try:
+            devices = SpeechRecognition._sd.query_devices()
+            input_devices = [dev['name'] for dev in devices if dev['max_input_channels'] > 0]
+            return input_devices if input_devices else ["Микрофоны не найдены"]
+        except Exception as e:
+            logger.error(f"Не удалось получить список микрофонов: {e}")
+            return [f"Ошибка: {e}"]
 
     @staticmethod
     async def handle_voice_message(recognized_text: str) -> None:
-        """Асинхронная обработка текста"""
         text_clean = recognized_text.strip()
         if text_clean:
             with SpeechRecognition._text_lock:
-                # Определение разделителя
-                last_char = SpeechRecognition._current_text[-1] if SpeechRecognition._current_text else ""
-                delimiter = "" if last_char in {'.', '!', '?', ','} else " "
-
                 SpeechRecognition._text_buffer.append(text_clean)
-                SpeechRecognition._current_text += f"{delimiter}{text_clean}"
-
-    @staticmethod
-    def _stereo_to_mono(audio_data):
-        return np.mean(audio_data, axis=1, dtype=audio_data.dtype)
-
-    _vosk_model_instance = None
-    _vosk_rec_instance = None
+                SpeechRecognition._current_text += f"{text_clean}. "
 
     @staticmethod
     def _init_vosk_recognizer():
         if SpeechRecognition._vosk_model_instance is None:
             model_path = f"SpeechRecognitionModels/Vosk/{SpeechRecognition.vosk_model}"
             try:
-                SpeechRecognition._vosk_model_instance = Model(model_path)
+                SpeechRecognition._vosk_model_instance = SpeechRecognition._vosk_Model(model_path)
                 logger.info(f"Модель Vosk загружена из: {model_path}")
             except Exception as e:
                 logger.error(f"Ошибка загрузки модели Vosk из {model_path}: {e}")
                 return False
-        
         if SpeechRecognition._vosk_rec_instance is None:
-            SpeechRecognition._vosk_rec_instance = KaldiRecognizer(SpeechRecognition._vosk_model_instance, SpeechRecognition.SAMPLE_RATE)
-            SpeechRecognition._vosk_rec_instance.SetWords(True)
-            SpeechRecognition._vosk_rec_instance.SetPartialWords(True)
-            logger.info("Распознаватель Vosk инициализирован.")
+            SpeechRecognition._vosk_rec_instance = SpeechRecognition._vosk_KaldiRecognizer(
+                SpeechRecognition._vosk_model_instance, SpeechRecognition.VOSK_SAMPLE_RATE
+            )
+            logger.info(f"Распознаватель Vosk инициализирован с sample_rate={SpeechRecognition.VOSK_SAMPLE_RATE}.")
         return True
 
     @staticmethod
-    async def recognize_vosk(audio_data: np.ndarray) -> str | None:
-        if not SpeechRecognition._init_vosk_recognizer():
-            return None
+    def _init_gigaam_recognizer():
+        if SpeechRecognition._gigaam_model_instance is None:
+            if SpeechRecognition._gigaam is None:
+                logger.error("Модуль GigaAM не был импортирован.")
+                return False
+            try:
+                logger.info(f"Загрузка модели GigaAM: {SpeechRecognition.gigaam_model}...")
+                model = SpeechRecognition._gigaam.load_model(SpeechRecognition.gigaam_model)
+                SpeechRecognition._gigaam_model_instance = model
+                logger.info(f"Модель GigaAM '{SpeechRecognition.gigaam_model}' успешно загружена.")
+            except Exception as e:
+                logger.error(f"Ошибка загрузки модели GigaAM '{SpeechRecognition.gigaam_model}': {e}")
+                return False
+        return True
 
-        # Vosk ожидает int16, а sounddevice дает float32.
-        # Преобразуем float32 в int16
+    @staticmethod
+    def _init_silero_vad():
+        if SpeechRecognition._silero_vad_model is None:
+            if SpeechRecognition._silero_vad_loader is None:
+                logger.error("Функция загрузки Silero VAD не была импортирована.")
+                return False
+            try:
+                model = SpeechRecognition._silero_vad_loader()
+                SpeechRecognition._silero_vad_model = model
+                logger.info("Модель Silero VAD успешно загружена через pip-пакет.")
+            except Exception as e:
+                logger.error(f"Не удалось загрузить модель Silero VAD. Ошибка: {e}")
+                return False
+        return True
+
+    @staticmethod
+    async def _recognize_vosk_from_buffer(audio_data: "np.ndarray") -> None:
+        np = SpeechRecognition._np
+        rec = SpeechRecognition._vosk_rec_instance
+        if rec is None or np is None:
+            logger.error("Распознаватель Vosk или Numpy не инициализирован.")
+            return
+
         audio_data_int16 = (audio_data * 32767).astype(np.int16)
-
-        # Создаем in-memory wave file
-        bytes_io = io.BytesIO()
-        with wave.open(bytes_io, 'wb') as mono_wf:
-            mono_wf.setnchannels(1)
-            mono_wf.setsampwidth(2)  # 2 bytes for int16
-            mono_wf.setframerate(SpeechRecognition.SAMPLE_RATE)
-            mono_wf.writeframes(audio_data_int16.tobytes())
         
-        bytes_io.seek(0)
-        
-        recognized_text = ''
-        rec = SpeechRecognition._vosk_rec_instance # Используем инициализированный распознаватель
-
-        # Сбрасываем состояние распознавателя для нового аудио
+        rec.AcceptWaveform(audio_data_int16.tobytes())
+        result_json = json.loads(rec.FinalResult())
         rec.Reset()
 
-        # Читаем данные из in-memory wave file
-        with wave.open(bytes_io, 'rb') as wf:
-            while True:
-                data = wf.readframes(4000) # Читаем по 4000 фреймов
-                if len(data) == 0:
-                    break
-                if rec.AcceptWaveform(data):
-                    stepResult = rec.Result()
-                    recognized_json = json.loads(stepResult)
-                    if 'text' in recognized_json and recognized_json['text']:
-                        recognized_text += ' ' + recognized_json['text'] + '.'
-                else:
-                    # Partial results are not used for final text, but can be logged for debugging
-                    pass
-        
-        final_result = rec.FinalResult()
-        final_json = json.loads(final_result)
-        if 'text' in final_json and final_json['text']:
-            recognized_text += ' ' + final_json['text'] + '.'
-        
-        return recognized_text.strip()
+        if 'text' in result_json and result_json['text']:
+            recognized_text = result_json['text']
+            logger.info(f"Vosk распознал: {recognized_text}")
+            await SpeechRecognition.handle_voice_message(recognized_text)
+        else:
+            logger.info("Vosk не распознал текст. Сохранение аудиофрагмента...")
+            try:
+                os.makedirs(SpeechRecognition.FAILED_AUDIO_DIR, exist_ok=True)
+                timestamp = int(time.time())
+                filename = os.path.join(SpeechRecognition.FAILED_AUDIO_DIR, f"failed_{timestamp}.wav")
+                with wave.open(filename, 'wb') as wf:
+                    wf.setnchannels(1)
+                    wf.setsampwidth(2)
+                    wf.setframerate(SpeechRecognition.VOSK_SAMPLE_RATE)
+                    wf.writeframes(audio_data_int16.tobytes())
+                logger.info(f"Фрагмент сохранен в: {filename}")
+            except Exception as e:
+                logger.error(f"Не удалось сохранить аудиофрагмент: {e}")
 
+    @staticmethod
+    async def _recognize_gigaam_from_buffer(audio_data: "np.ndarray") -> None:
+        model = SpeechRecognition._gigaam_model_instance
+        if model is None:
+            logger.error("Распознаватель GigaAM не инициализирован.")
+            return
+        
+        try:
+            transcriptions = model.transcribe(audio_data, sample_rate_hz=SpeechRecognition.VOSK_SAMPLE_RATE)
+            if transcriptions and 'text' in transcriptions[0] and transcriptions[0]['text']:
+                recognized_text = transcriptions[0]['text']
+                logger.info(f"GigaAM распознал: {recognized_text}")
+                await SpeechRecognition.handle_voice_message(recognized_text)
+            else:
+                logger.info("GigaAM не распознал текст. Сохранение аудиофрагмента...")
+                try:
+                    np = SpeechRecognition._np
+                    os.makedirs(SpeechRecognition.FAILED_AUDIO_DIR, exist_ok=True)
+                    timestamp = int(time.time())
+                    filename = os.path.join(SpeechRecognition.FAILED_AUDIO_DIR, f"failed_{timestamp}.wav")
+                    audio_data_int16 = (audio_data * 32767).astype(np.int16)
+                    with wave.open(filename, 'wb') as wf:
+                        wf.setnchannels(1)
+                        wf.setsampwidth(2)
+                        wf.setframerate(SpeechRecognition.VOSK_SAMPLE_RATE)
+                        wf.writeframes(audio_data_int16.tobytes())
+                    logger.info(f"Фрагмент сохранен в: {filename}")
+                except Exception as e:
+                    logger.error(f"Не удалось сохранить аудиофрагмент: {e}")
+        except Exception as e:
+            logger.error(f"Ошибка во время распознавания GigaAM: {e}")
+
+    @staticmethod
+    async def _process_audio_task(audio_data: "np.ndarray"):
+        async with SpeechRecognition._is_processing_audio:
+            if SpeechRecognition._recognizer_type == "vosk":
+                await SpeechRecognition._recognize_vosk_from_buffer(audio_data)
+            elif SpeechRecognition._recognizer_type == "gigaam":
+                await SpeechRecognition._recognize_gigaam_from_buffer(audio_data)
 
     @staticmethod
     async def live_recognition() -> None:
-        # Этот метод будет работать по-разному в зависимости от выбранного распознавателя.
-        # Для Google будет использоваться speech_recognition.Microphone.
-        # Для Vosk будет использоваться sounddevice для прямого захвата и отправки в Vosk API.
-
-        if SpeechRecognition._recognizer_type == "google":
-            recognizer = sr.Recognizer()
-            with sr.Microphone(device_index=SpeechRecognition.microphone_index, sample_rate=SpeechRecognition.SAMPLE_RATE,
-                               chunk_size=SpeechRecognition.CHUNK_SIZE) as source:
-                logger.info(
-                    f"Используется микрофон: {sr.Microphone.list_microphone_names()[SpeechRecognition.microphone_index]}")
-                recognizer.adjust_for_ambient_noise(source)
-                logger.info("Скажите что-нибудь (Google)...")
-
-                while SpeechRecognition.active:
-                    try:
-                        audio = await asyncio.get_event_loop().run_in_executor(
-                            None,
-                            lambda: recognizer.listen(source, timeout=5)
-                        )
-
-                        text = await asyncio.get_event_loop().run_in_executor(
-                            None,
-                            lambda: recognizer.recognize_google(audio, language="ru-RU")
-                        )
-                        if not text:
-                            text = await asyncio.get_event_loop().run_in_executor(
-                                None,
-                                lambda: recognizer.recognize_google(audio, language="en-EN")
-                            )
-
-                        if text:
-                            await SpeechRecognition.handle_voice_message(text)
-
-                    except sr.WaitTimeoutError:
-                        if SpeechRecognition.TIMEOUT_MESSAGE:
-                            ...
-                    except sr.UnknownValueError:
-                        ...
-                    except Exception as e:
-                        logger.error(f"Ошибка при распознавании Google: {e}")
-                        break
-        elif SpeechRecognition._recognizer_type == "vosk":
-            if not SpeechRecognition._init_vosk_recognizer():
-                logger.error("Не удалось инициализировать Vosk распознаватель. Отмена live_recognition.")
+        """Основной метод, запускающий процесс распознавания с пред-буферизацией."""
+        try:
+            if not SpeechRecognition._init_dependencies():
                 return
 
-            logger.info(f"Используется микрофон: {sr.Microphone.list_microphone_names()[SpeechRecognition.microphone_index]}")
-            logger.info("Скажите что-нибудь (Vosk)...")
+            if SpeechRecognition._recognizer_type == "vosk":
+                if not SpeechRecognition._init_silero_vad() or not SpeechRecognition._init_vosk_recognizer():
+                    logger.error("Не удалось инициализировать Vosk или Silero VAD. Распознавание остановлено.")
+                    return
 
-            # Используем sounddevice для захвата аудио в реальном времени
-            with sd.InputStream(
-                samplerate=SpeechRecognition.SAMPLE_RATE,
-                channels=1,
-                dtype='float32',
-                blocksize=SpeechRecognition.CHUNK_SIZE,
-                device=SpeechRecognition.microphone_index
-            ) as stream:
-                while SpeechRecognition.active:
-                    try:
-                        # Читаем данные из потока
-                        data, overflowed = stream.read(SpeechRecognition.CHUNK_SIZE)
+                sd = SpeechRecognition._sd
+                np = SpeechRecognition._np
+                torch = SpeechRecognition._torch
+                vad_model = SpeechRecognition._silero_vad_model
+                
+                silence_chunks_needed = int(SpeechRecognition.VAD_SILENCE_TIMEOUT_SEC * SpeechRecognition.VOSK_SAMPLE_RATE / SpeechRecognition.CHUNK_SIZE)
+                pre_buffer_size = int(SpeechRecognition.VAD_PRE_BUFFER_DURATION_SEC * SpeechRecognition.VOSK_SAMPLE_RATE / SpeechRecognition.CHUNK_SIZE)
+                
+                try:
+                    mic_name = SpeechRecognition.list_microphones()[SpeechRecognition.microphone_index]
+                    logger.info(f"Используется микрофон: {mic_name}")
+                except IndexError:
+                    logger.error(f"Ошибка: микрофон с индексом {SpeechRecognition.microphone_index} не найден.")
+                    return
+
+                logger.info("Ожидание речи (Vosk + Silero VAD с пред-буферизацией)...")
+
+                pre_speech_buffer = deque(maxlen=pre_buffer_size)
+                speech_buffer = []
+                is_speaking = False
+                silence_counter = 0
+
+                with sd.InputStream(
+                    samplerate=SpeechRecognition.VOSK_SAMPLE_RATE,
+                    channels=1,
+                    dtype='float32',
+                    blocksize=SpeechRecognition.CHUNK_SIZE,
+                    device=SpeechRecognition.microphone_index
+                ) as stream:
+                    while SpeechRecognition.active:
+                        audio_chunk, overflowed = stream.read(SpeechRecognition.CHUNK_SIZE)
                         if overflowed:
                             logger.warning("Переполнение буфера аудиопотока!")
 
-                        # Логируем информацию о полученных аудиоданных
-                        if data.size > 0:
-                            rms_val = np.sqrt(np.mean(data ** 2))
-                            logger.debug(f"Получены аудиоданные. Размер: {data.size}, RMS: {rms_val:.4f}")
-                            if rms_val < SpeechRecognition.SILENCE_THRESHOLD:
-                                logger.debug("Обнаружена тишина.")
-                        else:
-                            logger.debug("Получены пустые аудиоданные.")
+                        if not is_speaking:
+                            pre_speech_buffer.append(audio_chunk)
 
-                        # Преобразуем float32 в int16 для Vosk
-                        audio_data_int16 = (data * 32767).astype(np.int16)
-                        
-                        # Передаем данные в Vosk
-                        if SpeechRecognition._vosk_rec_instance.AcceptWaveform(audio_data_int16.tobytes()):
-                            result_json = json.loads(SpeechRecognition._vosk_rec_instance.Result())
-                            if 'text' in result_json and result_json['text']:
-                                # Добавляем ucfirst для единообразия с примером
-                                recognized_text = result_json['text']
-                                if recognized_text:
-                                    recognized_text = recognized_text[:1].upper() + recognized_text[1:]
-                                await SpeechRecognition.handle_voice_message(recognized_text)
-                                logger.info(f"Vosk распознал: {recognized_text}")
-                        else:
-                            # Обработка частичных результатов (опционально)
-                            partial_result_json = json.loads(SpeechRecognition._vosk_rec_instance.PartialResult())
-                            if 'partial' in partial_result_json and partial_result_json['partial']:
-                                # Включаем логирование частичных результатов для отладки
-                                logger.debug(f"Vosk частичный: {partial_result_json['partial']}")
-                                pass
-                        
-                        await asyncio.sleep(SpeechRecognition.VOSK_PROCESS_INTERVAL) # Небольшая задержка для предотвращения перегрузки
+                        audio_tensor = torch.from_numpy(audio_chunk.flatten())
+                        speech_prob = vad_model(audio_tensor, SpeechRecognition.VOSK_SAMPLE_RATE).item()
 
-                    except Exception as e:
-                        logger.error(f"Ошибка при распознавании Vosk в реальном времени: {e}")
-                        break
+                        if speech_prob > SpeechRecognition.VAD_THRESHOLD:
+                            if not is_speaking:
+                                logger.debug("🟢 Начало речи. Захват из пред-буфера.")
+                                is_speaking = True
+                                speech_buffer.clear()
+                                speech_buffer.extend(list(pre_speech_buffer))
+                            
+                            speech_buffer.append(audio_chunk)
+                            silence_counter = 0
+                        
+                        elif is_speaking:
+                            speech_buffer.append(audio_chunk)
+                            silence_counter += 1
+                            if silence_counter > silence_chunks_needed:
+                                logger.debug("🔴 Конец речи. Отправка на распознавание.")
+                                audio_to_process = np.concatenate(speech_buffer)
+                                
+                                is_speaking = False
+                                speech_buffer.clear()
+                                silence_counter = 0
+                                
+                                asyncio.create_task(SpeechRecognition._process_audio_task(audio_to_process))
+                        
+                        await asyncio.sleep(0.01)
             
-            # Получаем окончательный результат после завершения записи
-            final_result = SpeechRecognition._vosk_rec_instance.FinalResult()
-            final_json = json.loads(final_result)
-            if 'text' in final_json and final_json['text']:
-                recognized_text = final_json['text']
-                if recognized_text:
-                    recognized_text = recognized_text[:1].upper() + recognized_text[1:]
-                await SpeechRecognition.handle_voice_message(recognized_text)
-                logger.info(f"Vosk окончательный: {recognized_text}")
-
-
-    @staticmethod
-    async def async_audio_callback(indata):
-        try:
-            current_time = time.time()
-            # Преобразуем indata в numpy array
-            audio_data = np.frombuffer(indata, dtype=np.float32)
-            rms = np.sqrt(np.mean(audio_data ** 2))
-
-            async with audio_state.lock:
-                if rms > SpeechRecognition.SILENCE_THRESHOLD:
-                    audio_state.last_sound_time = current_time
-                    if not audio_state.is_recording:
-                        logger.debug("🟢 Начало записи")
-                        audio_state.is_recording = True
-                    await audio_state.add_to_buffer(audio_data)
-
-                elif audio_state.is_recording:
-                    silence_duration = 4
-                    audio_state.is_recording = False
-                    await SpeechRecognition.process_audio()
-                else:
-                    logger.debug("❌ Слишком короткая запись, сброс")
-                    audio_state.audio_buffer.clear()
-                    audio_state.is_recording = False
-
-        except Exception as e:
-            logger.error(f"Ошибка в колбэке: {str(e)}")
-
-    @staticmethod
-    async def process_audio():
-        try:
-            async with audio_state.lock:
-                if not audio_state.audio_buffer:
+            elif SpeechRecognition._recognizer_type == "gigaam":
+                if not SpeechRecognition._init_silero_vad() or not SpeechRecognition._init_gigaam_recognizer():
+                    logger.error("Не удалось инициализировать GigaAM или Silero VAD. Распознавание остановлено.")
                     return
 
-                audio_data = np.concatenate(audio_state.audio_buffer)
-                audio_state.audio_buffer.clear()
+                sd = SpeechRecognition._sd
+                np = SpeechRecognition._np
+                torch = SpeechRecognition._torch
+                vad_model = SpeechRecognition._silero_vad_model
+                
+                silence_chunks_needed = int(SpeechRecognition.VAD_SILENCE_TIMEOUT_SEC * SpeechRecognition.VOSK_SAMPLE_RATE / SpeechRecognition.CHUNK_SIZE)
+                pre_buffer_size = int(SpeechRecognition.VAD_PRE_BUFFER_DURATION_SEC * SpeechRecognition.VOSK_SAMPLE_RATE / SpeechRecognition.CHUNK_SIZE)
+                
+                try:
+                    mic_name = SpeechRecognition.list_microphones()[SpeechRecognition.microphone_index]
+                    logger.info(f"Используется микрофон: {mic_name}")
+                except IndexError:
+                    logger.error(f"Ошибка: микрофон с индексом {SpeechRecognition.microphone_index} не найден.")
+                    return
 
-                text = None
-                if SpeechRecognition._recognizer_type == "google":
-                    with BytesIO() as buffer:
-                        sf.write(buffer, audio_data, SpeechRecognition.SAMPLE_RATE, format='WAV')
-                        buffer.seek(0)
+                logger.info("Ожидание речи (GigaAM + Silero VAD с пред-буферизацией)...")
 
+                pre_speech_buffer = deque(maxlen=pre_buffer_size)
+                speech_buffer = []
+                is_speaking = False
+                silence_counter = 0
+
+                with sd.InputStream(
+                    samplerate=SpeechRecognition.VOSK_SAMPLE_RATE,
+                    channels=1,
+                    dtype='float32',
+                    blocksize=SpeechRecognition.CHUNK_SIZE,
+                    device=SpeechRecognition.microphone_index
+                ) as stream:
+                    while SpeechRecognition.active:
+                        audio_chunk, overflowed = stream.read(SpeechRecognition.CHUNK_SIZE)
+                        if overflowed:
+                            logger.warning("Переполнение буфера аудиопотока!")
+
+                        if not is_speaking:
+                            pre_speech_buffer.append(audio_chunk)
+
+                        audio_tensor = torch.from_numpy(audio_chunk.flatten())
+                        speech_prob = vad_model(audio_tensor, SpeechRecognition.VOSK_SAMPLE_RATE).item()
+
+                        if speech_prob > SpeechRecognition.VAD_THRESHOLD:
+                            if not is_speaking:
+                                logger.debug("🟢 Начало речи. Захват из пред-буфера.")
+                                is_speaking = True
+                                speech_buffer.clear()
+                                speech_buffer.extend(list(pre_speech_buffer))
+                            
+                            speech_buffer.append(audio_chunk)
+                            silence_counter = 0
+                        
+                        elif is_speaking:
+                            speech_buffer.append(audio_chunk)
+                            silence_counter += 1
+                            if silence_counter > silence_chunks_needed:
+                                logger.debug("🔴 Конец речи. Отправка на распознавание.")
+                                audio_to_process = np.concatenate(speech_buffer)
+                                
+                                is_speaking = False
+                                speech_buffer.clear()
+                                silence_counter = 0
+                                
+                                asyncio.create_task(SpeechRecognition._process_audio_task(audio_to_process))
+                        
+                        await asyncio.sleep(0.01)
+
+            elif SpeechRecognition._recognizer_type == "google":
+                sr = SpeechRecognition._sr
+                recognizer = sr.Recognizer()
+                google_sample_rate = 44100
+                with sr.Microphone(device_index=SpeechRecognition.microphone_index, sample_rate=google_sample_rate,
+                                   chunk_size=SpeechRecognition.CHUNK_SIZE) as source:
+                    logger.info(f"Используется микрофон: {sr.Microphone.list_microphone_names()[SpeechRecognition.microphone_index]}")
+                    recognizer.adjust_for_ambient_noise(source)
+                    logger.info("Скажите что-нибудь (Google)...")
+                    while SpeechRecognition.active:
                         try:
-                            recognizer = sr.Recognizer()
-                            with sr.AudioFile(buffer) as source:
-                                audio = recognizer.record(source)
-                                text = recognizer.recognize_google(audio, language="ru-RU")
-                                logger.info(f"Google распознал: {text}")
-                        except sr.UnknownValueError:
-                            logger.warning("Google не распознал речь.")
+                            audio = await asyncio.get_event_loop().run_in_executor(None, lambda: recognizer.listen(source, timeout=5))
+                            text = await asyncio.get_event_loop().run_in_executor(None, lambda: recognizer.recognize_google(audio, language="ru-RU"))
+                            if text: await SpeechRecognition.handle_voice_message(text)
+                        except sr.WaitTimeoutError: pass
+                        except sr.UnknownValueError: pass
                         except Exception as e:
-                            logger.error(f"Ошибка распознавания Google: {str(e)}")
-                elif SpeechRecognition._recognizer_type == "vosk":
-                    text = await SpeechRecognition.recognize_vosk(audio_data)
-
-                if text:
-                    await SpeechRecognition.handle_voice_message(text)
+                            logger.error(f"Ошибка при распознавании Google: {e}")
+                            break
         except Exception as e:
-            logger.error(f"Ошибка обработки: {str(e)}")
+            logger.error(f"Критическая ошибка в цикле распознавания: {e}", exc_info=True)
+        finally:
+            SpeechRecognition._is_running = False
+            logger.info("Цикл распознавания речи остановлен.")
 
-    @staticmethod
-    async def recognize_speech(audio_buffer):
-        # Этот метод используется для распознавания из буфера,
-        # который уже является AudioFile-подобным объектом.
-        # Для Vosk API нам нужен numpy array.
-        # Поэтому, если выбран Vosk, нужно будет преобразовать audio_buffer в numpy array.
-        # Или же этот метод будет использоваться только для Google.
-        # Пока оставим его для Google, так как он принимает AudioFile.
-        # Если потребуется Vosk здесь, нужно будет пересмотреть.
-        recognizer = sr.Recognizer()
-        text = None
-
-        if SpeechRecognition._recognizer_type == "google":
-            try:
-                with sr.AudioFile(audio_buffer) as source:
-                    audio = recognizer.record(source)
-
-                text = recognizer.recognize_google(audio, language="ru-RU")
-                if not text:
-                    text = recognizer.recognize_google(audio, language="en-EN")
-                return text
-            except sr.UnknownValueError:
-                logger.error("Google: Не удалось распознать речь")
-                return None
-            except sr.RequestError as e:
-                logger.error(f"Google: Ошибка API: {e}")
-                return None
-        elif SpeechRecognition._recognizer_type == "vosk":
-            # Здесь нужно будет преобразовать audio_buffer в numpy array
-            # Это сложнее, так как audio_buffer может быть BytesIO или другим объектом
-            # Для простоты, пока этот метод будет работать только с Google
-            logger.warning("recognize_speech не поддерживает Vosk напрямую с текущим типом audio_buffer.")
-            return None
-
-    @staticmethod
-    async def speach_recognition_start_async_other_system():
-        while SpeechRecognition.active:
-            try:
-                await SpeechRecognition.async_audio_callback(0)
-                await asyncio.sleep(0.1)  # Уменьшим интервал
-            except Exception as e:
-                logger.error(f"Ошибка в speach_recognition_start_async_other_system: {e}")
 
     @staticmethod
     async def speach_recognition_start_async():
@@ -396,28 +482,16 @@ class SpeechRecognition:
 
     @staticmethod
     def speach_recognition_start(device_id: int, loop):
+        if SpeechRecognition._is_running:
+            logger.warning("Попытка запустить распознавание, когда оно уже запущено. Игнорируется.")
+            return
+
+        SpeechRecognition._is_running = True
+        SpeechRecognition.active = True
         SpeechRecognition.microphone_index = device_id
         asyncio.run_coroutine_threadsafe(SpeechRecognition.speach_recognition_start_async(), loop)
 
-
-    @staticmethod
-    async def audio_monitoring():
-        try:
-            logger.info("🚀 Запуск аудиомониторинга")
-            loop = asyncio.get_event_loop()
-            with sd.InputStream(
-                    callback=lambda indata, *_: asyncio.run_coroutine_threadsafe(SpeechRecognition.async_audio_callback(indata), loop),
-                    channels=1,
-                    samplerate=SpeechRecognition.SAMPLE_RATE,
-                    blocksize=SpeechRecognition.CHUNK_SIZE,
-                    device=SpeechRecognition.microphone_index
-            ):
-                while SpeechRecognition.active:
-                    await asyncio.sleep(0.1)
-        except Exception as e:
-            logger.critical(f"Критическая ошибка: {str(e)}")
-
     @staticmethod
     async def get_current_text() -> str:
-        async with SpeechRecognition._text_lock:
+        with SpeechRecognition._text_lock:
             return SpeechRecognition._current_text.strip()

@@ -23,8 +23,8 @@ import timeit
 import pickletools
 import logging.config
 import fileinput
-# import pywintypes
-# import win32file
+import pywintypes
+import win32file
 import pyworld
 import cProfile
 import filecmp

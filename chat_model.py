@@ -7,7 +7,8 @@ import requests
 from openai import OpenAI
 import re
 import importlib
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
+import queue
 import os  # Added for os.environ
 
 from Logger import logger
@@ -205,55 +206,178 @@ class ChatModel:
         except Exception as e:
             logger.error(f"Failed to update OpenAI client: {e}")
             self.client = None
-
-    def generate_response(self, user_input: str, system_input: str = "", image_data: list[bytes] = None):
+    def generate_response(
+            self,
+            user_input : str,
+            system_input : str = "",
+            image_data : list[bytes] | None = None
+    ):
+        # 0. Подготовка -----------------------------------------------------------------
         if image_data is None:
             image_data = []
 
         self.check_change_current_character()
 
-        history_data = self.current_character.history_manager.load_history()
-        llm_messages_history = history_data.get("messages", [])
+        # 1. История --------------------------------------------------------------------
+        history_data           = self.current_character.history_manager.load_history()
+        llm_messages_history   = history_data.get("messages", [])
 
         if self.infos_to_add_to_history:
             llm_messages_history.extend(self.infos_to_add_to_history)
             self.infos_to_add_to_history.clear()
 
-        self.current_character.variables["GAME_DISTANCE"] = self.distance
-        self.current_character.variables["GAME_ROOM_PLAYER"] = self.get_room_name(self.roomPlayer)
-        self.current_character.variables["GAME_ROOM_MITA"] = self.get_room_name(self.roomMita)
-        self.current_character.variables["GAME_NEAR_OBJECTS"] = self.nearObjects
-        self.current_character.variables["GAME_ACTUAL_INFO"] = self.actualInfo
+        # 2. Игровые переменные ---------------------------------------------------------
+        self.current_character.variables["GAME_DISTANCE"]      = self.distance
+        self.current_character.variables["GAME_ROOM_PLAYER"]   = self.get_room_name(self.roomPlayer)
+        self.current_character.variables["GAME_ROOM_MITA"]     = self.get_room_name(self.roomMita)
+        self.current_character.variables["GAME_NEAR_OBJECTS"]  = self.nearObjects
+        self.current_character.variables["GAME_ACTUAL_INFO"]   = self.actualInfo
 
+        # 3. Шахматы --------------------------------------------------------------------
+        chess_system_message_for_llm_content: Optional[str] = None
+
+        if hasattr(self.current_character, 'chess_state_queue') \
+        and self.current_character.chess_state_queue is not None \
+        and self.current_character.get_variable("playingChess", False):
+
+            chess_state_details_string = "Шахматная игра активна. Обновление состояния..."
+            latest_chess_state_data: Optional[Dict[str, Any]] = None
+
+            while not self.current_character.chess_state_queue.empty():
+                try:
+                    latest_chess_state_data = self.current_character.chess_state_queue.get_nowait()
+                except queue.Empty:
+                    break
+                except Exception as e:
+                    logger.error(f"[{self.current_character.char_id}] Ошибка чтения chess_state_queue: {e}")
+                    latest_chess_state_data = {"error": f"Ошибка чтения состояния: {e}"}
+                    break
+
+            if latest_chess_state_data:
+                # ---- формируем подробную строку ----------------------------------------
+                fen                    = latest_chess_state_data.get('fen',                 'N/A')
+                current_board_turn     = latest_chess_state_data.get('turn',               'N/A')
+                legal_moves_uci        = latest_chess_state_data.get('legal_moves_uci',    [])
+                is_game_over           = latest_chess_state_data.get('is_game_over',       False)
+                outcome                = latest_chess_state_data.get('outcome_message',    'Игра продолжается')
+                elo                    = latest_chess_state_data.get('current_elo',        'N/A')
+                player_gui_is_white    = latest_chess_state_data.get('player_is_white_in_gui', True)
+                last_board_move_san    = latest_chess_state_data.get('last_move_san',      'Нет (начало игры)')
+
+                llm_color_textual   = "белыми" if not player_gui_is_white else "черными"
+                gui_color_textual   = "белыми" if player_gui_is_white  else "черными"
+
+                llm_actual_color_string = 'white' if not player_gui_is_white else 'black'
+                gui_actual_color_string = 'white' if player_gui_is_white  else 'black'
+
+                s = []
+                s.append(f"--- СОСТОЯНИЕ ШАХМАТНОЙ ПАРТИИ (Maia ELO {elo}) ---")
+                s.append(f"ТЫ ИГРАЕШЬ: {llm_color_textual}.")
+                s.append(f"ТВОЙ ОППОНЕНТ (Игрок GUI) ИГРАЕТ: {gui_color_textual}.")
+
+                # последний ход ----------------------------------------------------------
+                if last_board_move_san != 'Нет (начало игры)':
+                    last_mover_actual_color_string = 'black' if current_board_turn == 'white' else 'white'
+                    if last_mover_actual_color_string == llm_actual_color_string:
+                        s.append(f"ПОСЛЕДНИЙ ХОД СДЕЛАЛ ТЫ ({llm_color_textual}): {last_board_move_san}.")
+                    elif last_mover_actual_color_string == gui_actual_color_string:
+                        s.append(f"ПОСЛЕДНИЙ ХОД СДЕЛАЛ Игрок GUI ({gui_color_textual}): {last_board_move_san}.")
+                    else:
+                        s.append(f"ПОСЛЕДНИЙ ХОД НА ДОСКЕ: {last_board_move_san} (не удалось определить автора).")
+                else:
+                    s.append("ПОСЛЕДНИЙ ХОД: Это начало партии, ходов еще не было.")
+
+                s.append(f"ТЕКУЩАЯ ПОЗИЦИЯ (FEN): {fen}.")
+                s.append(f"СЕЙЧАС ХОДЯТ: {'белые' if current_board_turn == 'white' else 'черные'}.")
+
+                is_llm_turn_now = (current_board_turn == llm_actual_color_string)
+
+                # статус игры ------------------------------------------------------------
+                if is_game_over:
+                    s.append("СТАТУС ИГРЫ: ОКОНЧЕНА.")
+                    s.append(f"РЕЗУЛЬТАТ: {outcome}.")
+                    if latest_chess_state_data.get("game_resigned_by_llm"):
+                        s.append("Ты сдал эту партию.")
+                    elif latest_chess_state_data.get("game_stopped_by_llm"):
+                        s.append("Ты остановил эту партию.")
+                else:
+                    s.append("СТАТУС ИГРЫ: ПРОДОЛЖАЕТСЯ.")
+                    if is_llm_turn_now:
+                        s.append("ЭТО ТВОЙ ХОД.")
+                        if legal_moves_uci:
+                            max_display = 15
+                            valid_moves = [m for m in legal_moves_uci if m]
+                            s.append(f"ТВОИ ЛЕГАЛЬНЫЕ ХОДЫ (UCI, первые {max_display}): "
+                                    f"{', '.join(valid_moves[:max_display])}"
+                                    + ("." if len(valid_moves)<=max_display
+                                        else f" (показаны первые {max_display} из {len(valid_moves)})."))
+                            s.append("Используй тег <MakeChessMoveAsLLM>uci_ход</MakeChessMoveAsLLM> чтобы сделать ход.")
+                            s.append("Пример: <MakeChessMoveAsLLM>e2e4</MakeChessMoveAsLLM>")
+                            # Подсказка о превращении пешки
+                            if any(len(m)==5 and m[4] in 'qrbn' for m in valid_moves):
+                                s.append("Для превращения пешки добавь букву фигуры, напр.: e7e8q.")
+                        else:
+                            s.append("У ТЕБЯ НЕТ ДОСТУПНЫХ ХОДОВ.")
+                    else:
+                        s.append(f"СЕЙЧАС ХОД {gui_color_textual.upper()} (GUI). Ожидай.")
+
+                # Ошибки модуля
+                if latest_chess_state_data.get("error"):
+                    s.append(f"СИСТЕМНОЕ СООБЩЕНИЕ ШАХМАТНОГО МОДУЛЯ: {latest_chess_state_data['error']}.")
+                if latest_chess_state_data.get("error_move") and is_llm_turn_now:
+                    s.append(f"ВАЖНО: Предыдущий ход ({latest_chess_state_data['error_move']}) неверен: "
+                            f"{latest_chess_state_data.get('error_message_for_move','Неверный ход')}.")
+
+                s.append("--- КОНЕЦ ШАХМАТНОЙ ИНФОРМАЦИИ ---")
+                chess_system_message_for_llm_content = "\n".join(s)
+
+                logger.info(f"[{self.current_character.char_id}] Chess system msg formed.")
+            else:
+                msg = ("Шахматная игра активна, но нет данных от модуля. "
+                    "Запрашиваю текущее состояние.")
+                chess_system_message_for_llm_content = msg
+                logger.info(f"[{self.current_character.char_id}] {msg}")
+                if hasattr(self.current_character, '_send_chess_command'):
+                    self.current_character._send_chess_command({"action": "get_state"})
+
+        # 4. Системные промпты / память -------------------------------------------------
         combined_messages = []
 
-        # Logic for individual system messages, moved from Character to ChatModel
         if bool(self.gui.settings.get("SEPARATE_PROMPTS", True)):
-            # Load the main template content to extract individual file paths
-            main_template_content = ""
+            # подгружаем файлы по отдельности
             try:
-                resolved_main_template_id = self.current_character.dsl_interpreter.resolver.resolve_path(self.current_character.main_template_path_relative)
-                main_template_content = self.current_character.dsl_interpreter.resolver.load_text(resolved_main_template_id, f"main template for individual messages for {self.current_character.char_id}")
+                resolved_main = self.current_character.dsl_interpreter.resolver.resolve_path(
+                    self.current_character.main_template_path_relative)
+                main_template_content = self.current_character.dsl_interpreter.resolver.load_text(
+                    resolved_main, "main template for separate prompts")
             except Exception as e:
-                logger.error(f"Critical error loading main template {self.current_character.main_template_path_relative} for {self.current_character.char_id}: {e}", exc_info=True)
-                combined_messages.append({"role": "system", "content": f"[CRITICAL ERROR LOADING MAIN TEMPLATE FOR {self.current_character.char_id}]"})
-                # Continue to add memory and history, but main system prompt is broken
-            
-            # Extract all [<path>] placeholders from the main template content
-            file_paths_from_template = self.current_character.dsl_interpreter.placeholder_pattern.findall(main_template_content)
-            
-            for file_path_relative in file_paths_from_template:
+                logger.error(f"Critical error loading main template for {self.current_character.char_id}: {e}",
+                            exc_info=True)
+                main_template_content = ""
+                combined_messages.append({"role": "system",
+                                        "content": f"[CRITICAL ERROR LOADING MAIN TEMPLATE FOR {self.current_character.char_id}]"})
+            # вытаскиваем пути вида [<path>]
+            file_paths = self.current_character.dsl_interpreter.placeholder_pattern.findall(main_template_content)
+            for p in file_paths:
                 try:
-                    content = self.current_character.dsl_interpreter.process_file(file_path_relative)
+                    content = self.current_character.dsl_interpreter.process_file(p)
                     if content and content.strip():
                         combined_messages.append({"role": "system", "content": content})
                 except Exception as e:
-                    logger.error(f"Critical error during DSL processing for individual file {file_path_relative} for {self.current_character.char_id}: {e}", exc_info=True)
-                    combined_messages.append({"role": "system", "content": f"[ERROR PROCESSING {file_path_relative}]"})
+                    logger.error(f"Error processing DSL file {p} for {self.current_character.char_id}: {e}",
+                                exc_info=True)
+                    combined_messages.append({"role": "system",
+                                            "content": f"[ERROR PROCESSING {p}]"})
         else:
-            # Original logic: combine all into one main system prompt
+            # старое поведение
             combined_messages.extend(self.current_character.get_full_system_setup_for_llm())
 
+        # Добавляем шахматы (если сформировано)
+        if chess_system_message_for_llm_content:
+            combined_messages.append({"role": "system",
+                                    "content": chess_system_message_for_llm_content})
+
+        # 5. История памяти -------------------------------------------------------------
         if self.current_character != self.GameMaster:
             llm_messages_history_limited = llm_messages_history[-self.memory_limit:]
         else:
@@ -261,26 +385,30 @@ class ChatModel:
 
         combined_messages.extend(llm_messages_history_limited)
 
-        user_message_for_history = None
+        # 6. Добавляем system_input -----------------------------------------------------
         if system_input:
             combined_messages.append({"role": "system", "content": system_input})
 
-        user_message_content_list = []
+        # 7. Пользовательское сообщение (текст + картинки) ------------------------------
+        user_message_for_history = None
+        user_content_chunks = []
+
         if user_input:
-            user_message_content_list.append({"type": "text", "text": user_input})
+            user_content_chunks.append({"type": "text", "text": user_input})
 
         for img_bytes in image_data:
-            user_message_content_list.append({
+            user_content_chunks.append({
                 "type": "image_url",
                 "image_url": {
                     "url": f"data:image/jpeg;base64,{base64.b64encode(img_bytes).decode('utf-8')}"
                 }
             })
 
-        if user_message_content_list:
-            user_message_for_history = {"role": "user", "content": user_message_content_list}
+        if user_content_chunks:
+            user_message_for_history = {"role": "user", "content": user_content_chunks}
             combined_messages.append(user_message_for_history)
 
+        # 8. Генерация ответа -----------------------------------------------------------
         try:
             llm_response_content, success = self._generate_chat_response(combined_messages)
 
@@ -290,45 +418,42 @@ class ChatModel:
 
             processed_response_text = self.current_character.process_response_nlp_commands(llm_response_content)
 
-            # --- Start of Embedding/Command Replacer Integration ---
-            final_response_text = processed_response_text  # Initialize
+            # --- Встраивание «command replacer» (embeddings) ---------------------------
+            final_response_text = processed_response_text
             try:
-                use_command_replacer = self.gui.settings.get("USE_COMMAND_REPLACER", False)
-                # Check environment variable for default enabling
+                use_cmd_replacer  = self.gui.settings.get("USE_COMMAND_REPLACER", False)
                 enable_by_default = os.environ.get("ENABLE_COMMAND_REPLACER_BY_DEFAULT", "0") == "1"
 
-                if use_command_replacer and enable_by_default:
-                    if not hasattr(self, 'model_handler'):  # Changed from 'embedder'
+                if use_cmd_replacer and enable_by_default:
+                    if not hasattr(self, 'model_handler'):
                         from utils.embedding_handler import EmbeddingModelHandler
                         self.model_handler = EmbeddingModelHandler()
-
                     if not hasattr(self, 'parser'):
                         from utils.command_parser import CommandParser
                         self.parser = CommandParser(model_handler=self.model_handler)
 
-                    min_similarity = float(self.gui.settings.get("MIN_SIMILARITY_THRESHOLD", 0.40))
-                    category_threshold = float(self.gui.settings.get("CATEGORY_SWITCH_THRESHOLD", 0.18))
-                    skip_comma = bool(self.gui.settings.get("SKIP_COMMA_PARAMETERS", True))  # Ensure bool conversion
+                    min_sim     = float(self.gui.settings.get("MIN_SIMILARITY_THRESHOLD", 0.40))
+                    cat_switch  = float(self.gui.settings.get("CATEGORY_SWITCH_THRESHOLD", 0.18))
+                    skip_comma  = bool (self.gui.settings.get("SKIP_COMMA_PARAMETERS", True))
 
                     logger.info(f"Attempting command replacement on: {processed_response_text[:100]}...")
                     final_response_text, _ = self.parser.parse_and_replace(
                         processed_response_text,
-                        min_similarity_threshold=min_similarity,
-                        category_switch_threshold=category_threshold,
+                        min_similarity_threshold=min_sim,
+                        category_switch_threshold=cat_switch,
                         skip_comma_params=skip_comma
                     )
                     logger.info(f"After command replacement: {final_response_text[:100]}...")
-                elif use_command_replacer and not enable_by_default:
-                    logger.info("Command replacer is enabled by settings but not by default environment variable.")
-                elif not use_command_replacer:
-                    logger.info("Command replacer is disabled by settings.")
+                elif use_cmd_replacer and not enable_by_default:
+                    logger.info("Command replacer enabled in settings but disabled by ENV.")
+                else:
+                    logger.info("Command replacer disabled.")
+            except Exception as ex:
+                logger.error(f"Error during command replacement: {ex}", exc_info=True)
+                # остаётся processed_response_text
 
-            except Exception as exi:
-                logger.error(f"Error during command replacement using embeddings: {exi}", exc_info=True)
-                # final_response_text remains processed_response_text if error occurs
-            # --- End of Embedding/Command Replacer Integration ---
-
-            assistant_message = {"role": "assistant", "content": final_response_text}  # Use final_response_text
+            # 9. Сохраняем историю / TTS --------------------------------------------------
+            assistant_message = {"role": "assistant", "content": final_response_text}
 
             if user_message_for_history:
                 llm_messages_history.append(user_message_for_history)
@@ -337,19 +462,18 @@ class ChatModel:
             self.current_character.save_character_state_to_history(llm_messages_history)
 
             if self.current_character != self.GameMaster or bool(self.gui.settings.get("GM_VOICE")):
-                self.gui.textToTalk = self.process_text_to_voice(final_response_text)  # Use final_response_text
-                self.gui.textSpeaker = self.current_character.silero_command
-                self.gui.textSpeakerMiku = self.current_character.miku_tts_name
-                self.gui.silero_turn_off_video = self.current_character.silero_turn_off_video
+                self.gui.textToTalk           = self.process_text_to_voice(final_response_text)
+                self.gui.textSpeaker          = self.current_character.silero_command
+                self.gui.textSpeakerMiku      = self.current_character.miku_tts_name
+                self.gui.silero_turn_off_video= self.current_character.silero_turn_off_video
                 logger.info(f"TTS Text: {self.gui.textToTalk}, Speaker: {self.gui.textSpeaker}")
 
             self.gui.update_debug_info()
-            return final_response_text  # Return final_response_text
+            return final_response_text
 
         except Exception as e:
             logger.error(f"Error during LLM response generation or processing: {e}", exc_info=True)
             return f"Ошибка: {e}"
-
     def check_change_current_character(self):
         if not self.current_character_to_change:
             return

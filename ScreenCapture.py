@@ -1,6 +1,6 @@
 import mss
 import mss.tools
-from PIL import Image
+# from PIL import Image  <- УДАЛЕНО ОТСЮДА
 import numpy as np
 import time
 import threading
@@ -17,8 +17,45 @@ class ScreenCapture:
         self._fps = 1  # По умолчанию 1 кадр в секунду
         self._interval_seconds = 1.0  # По умолчанию 1 кадр в секунду
         self._sct = None  # Инициализируем здесь как None, чтобы создавать в потоке
+        self._pil_checked = False # Флаг, чтобы не проверять установку PIL каждый раз
+
+    def _ensure_pil_installed(self):
+        """Проверяет наличие Pillow и устанавливает при необходимости."""
+        if self._pil_checked:
+            return
+        
+        try:
+            # Пробуем импортировать, чтобы проверить наличие
+            __import__('PIL.Image')
+            logger.debug("Библиотека Pillow (PIL) уже установлена.")
+        except ImportError:
+            logger.warning("Библиотека Pillow (PIL) не найдена. Попытка автоматической установки...")
+            import subprocess
+            import sys
+            try:
+                # Выполняем установку через pip, используя текущий интерпретатор Python
+                subprocess.check_call([sys.executable, "-m", "pip", "install", "Pillow"])
+                logger.info("Библиотека Pillow успешно установлена.")
+                # После установки нужно обновить пути импорта
+                import importlib
+                importlib.invalidate_caches()
+            except (subprocess.CalledProcessError, ImportError) as e:
+                logger.error(f"Не удалось установить или импортировать Pillow: {e}")
+                logger.error("Пожалуйста, установите библиотеку вручную: pip install Pillow")
+                raise RuntimeError("Необходимая библиотека Pillow не может быть установлена.") from e
+        
+        self._pil_checked = True
+
 
     def start_capture(self, interval_seconds: float = 1.0, quality: int = 25, fps: int = 1, max_history_frames: int = 1, capture_width: int = 1024, capture_height: int = 768):
+        # --- НАЧАЛО ИЗМЕНЕНИЙ: ДИНАМИЧЕСКАЯ ПОДГРУЗКА ПАКЕТА ---
+        try:
+            self._ensure_pil_installed()
+        except RuntimeError as e:
+            logger.error(f"Невозможно запустить захват экрана: {e}")
+            return
+        # --- КОНЕЦ ИЗМЕНЕНИЙ ---
+
         if self._running:
             logger.warning("Захват экрана уже запущен.")
             return
@@ -47,6 +84,9 @@ class ScreenCapture:
         logger.info("Захват экрана остановлен.")
 
     def _capture_loop(self):
+        # Импортируем Image здесь, так как на этапе start_capture мы убедились в её наличии
+        from PIL import Image
+
         # Инициализируем mss.mss() внутри потока, где он будет использоваться
         # Это решает проблему 'srcdc' object has no attribute
         with mss.mss() as sct:
@@ -95,27 +135,3 @@ class ScreenCapture:
 
     def is_running(self) -> bool:
         return self._running
-
-if __name__ == "__main__":
-    # Пример использования
-    logger.info("Запуск примера ScreenCapture...")
-    capture = ScreenCapture()
-    capture.start_capture(interval_seconds=2.0)  # Захват каждые 2 секунды
-
-    try:
-        for i in range(10):
-            frame = capture.get_latest_frame()
-            if frame:
-                logger.info(f"Получен кадр размером: {len(frame)} байт")
-                # Здесь можно было бы сохранить кадр в файл для проверки
-                # with open(f"screenshot_{i}.png", "wb") as f:
-                #     f.write(frame)
-            else:
-                logger.info("Кадр пока не готов или произошла ошибка.")
-            time.sleep(1)  # Ждем, чтобы не запрашивать слишком часто
-
-    except KeyboardInterrupt:
-        logger.info("Пример остановлен пользователем.")
-    finally:
-        capture.stop_capture()
-        logger.info("Захват экрана завершен.")

@@ -99,15 +99,15 @@ class LocalVoice:
         try:
             from tts_with_rvc import TTS_RVC
             self.tts_rvc_module = TTS_RVC
-        except ImportError:
-            logger.info(_("Модуль tts_with_rvc не установлен", "Module tts_with_rvc is not installed"))
+        except ImportError as ex:
+            logger.info(_(f"Модуль tts_with_rvc не установлен: {ex}", f"Module tts_with_rvc is not installed: {ex}"))
 
 
         try:
             from fish_speech_lib.inference import FishSpeech
             self.fish_speech_module = FishSpeech
-        except ImportError:
-            logger.info(_("Модуль fish_speech_lib не установлен", "Module fish_speech_lib is not installed"))
+        except ImportError as ex:
+            logger.info(_(f"Модуль fish_speech_lib не установлен: {ex}", f"Module fish_speech_lib is not installed: {ex}"))
 
 
         try:

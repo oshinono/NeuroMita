@@ -31,7 +31,6 @@ from utils import SH
 import sys
 
 import sounddevice as sd
-from SpeechRecognition import SpeechRecognition
 from ScreenCapture import ScreenCapture  # Импортируем ScreenCapture
 
 import requests
@@ -40,6 +39,7 @@ import importlib
 from LocalVoice import LocalVoice
 import time
 
+from SpeechRecognition import SpeechRecognition
 from utils.PipInstaller import PipInstaller
 
 
@@ -1746,7 +1746,7 @@ class ChatGUI:
                 'type': 'combobox',
                 'key': 'RECOGNIZER_TYPE',
                 # TODO Вернуть воск 'options': ["google", "vosk"],
-                'options': ["google","vosk"],
+                'options': ["google","vosk","gigaam"],
                 'default': "google",
                 'command': lambda value: SpeechRecognition.set_recognizer_type(value),
                 'tooltip': _("Выберите движок распознавания речи: Google или Vosk.",
