@@ -225,6 +225,10 @@ class ChatGUI:
         self.screen_capture_thread = None
         self.screen_capture_running = False
         self.last_captured_frame = None
+        self.image_request_thread = None
+        self.image_request_running = False
+        self.last_image_request_time = time.time()
+        self.image_request_timer_running = False
 
     def start_asyncio_loop(self):
         """Запускает цикл событий asyncio в отдельном потоке."""
@@ -370,6 +374,36 @@ class ChatGUI:
                     self.textToTalk = ""  # Очищаем текст в случае ошибки
             else:
                 logger.error("Ошибка: Цикл событий не готов.")
+
+        # --- Логика периодической отправки изображений ---
+        if self.settings.get("SEND_IMAGE_REQUESTS", False):
+            current_time = time.time()
+            interval = float(self.settings.get("IMAGE_REQUEST_INTERVAL", 20.0))
+            if current_time - self.last_image_request_time >= interval:
+
+                # Захватываем изображение
+                image_data = []
+                if self.settings.get("ENABLE_SCREEN_ANALYSIS", False):
+                    logger.info(
+                        f"Отправка периодического запроса с изображением ({current_time - self.last_image_request_time}/{interval} сек).")
+                    history_limit = int(self.settings.get("SCREEN_CAPTURE_HISTORY_LIMIT", 1))
+                    frames = self.screen_capture_instance.get_recent_frames(history_limit)
+                    if frames:
+                        image_data.extend(frames)
+                        logger.info(f"Захвачено {len(frames)} кадров для периодической отправки.")
+                    else:
+                        ...#logger.info("Анализ экрана включен, но кадры не готовы или история пуста для периодической отправки.")
+
+                    if image_data:
+                        # Отправляем запрос только с изображением (без текста)
+                        if self.loop and self.loop.is_running():
+                            asyncio.run_coroutine_threadsafe(self.async_send_message(user_input="", system_input="", image_data=image_data), self.loop)
+                            self.last_image_request_time = current_time
+                        else:
+                            logger.error("Ошибка: Цикл событий не готов для периодической отправки изображений.")
+                    else:
+                        ...#logger.warning("Нет изображений для периодической отправки.")
+
 
         # --- Остальная часть функции без изменений (обработка микрофона) ---
         if bool(self.settings.get("MIC_INSTANT_SENT")):
@@ -1254,13 +1288,23 @@ class ChatGUI:
              'key': 'SCREEN_CAPTURE_HISTORY_LIMIT', 'type': 'entry',
              'default': 1, 'validation': self.validate_positive_integer,
              'tooltip': _('Максимальное количество последних кадров для отправки в модель (минимум 1).',
-                          'Maximum number of recent frames to send to the model (minimum 1).')},
+                          'Maximum number of recent frames to send to the model (минимум 1).')},
             {'label': _('Ширина захвата', 'Capture Width'), 'key': 'SCREEN_CAPTURE_WIDTH', 'type': 'entry',
              'default': 1024, 'validation': self.validate_positive_integer,
              'tooltip': _('Ширина захватываемого изображения в пикселях.', 'Width of the captured image in pixels.')},
             {'label': _('Высота захвата', 'Capture Height'), 'key': 'SCREEN_CAPTURE_HEIGHT', 'type': 'entry',
              'default': 768, 'validation': self.validate_positive_integer,
              'tooltip': _('Высота захватываемого изображения в пикселях.', 'Height of the captured image in pixels.')},
+            {'label': _('Отправлять запросы с изображениями', 'Send Image Requests'), 'key': 'SEND_IMAGE_REQUESTS',
+             'type': 'checkbutton',
+             'default_checkbutton': False,
+             'tooltip': _('Автоматически отправлять запросы с захваченными изображениями.',
+                          'Automatically send requests with captured images.')},
+            {'label': _('Период запросов (сек)', 'Image Request Interval (sec)'), 'key': 'IMAGE_REQUEST_INTERVAL',
+             'type': 'entry',
+             'default': 20.0, 'validation': self.validate_float_positive,
+             'tooltip': _('Интервал между автоматической отправкой запросов с изображениями в секундах (минимум 1.0).',
+                          'Interval between automatic sending of image requests in seconds (minimum 1.0).')},
         ]
         self.create_settings_section(parent,
                                      _("Настройки анализа экрана", "Screen Analysis Settings"),
@@ -1632,6 +1676,17 @@ class ChatGUI:
             self.screen_capture_running = False
             logger.info("Поток захвата экрана остановлен.")
 
+    def start_image_request_timer(self):
+        if not self.image_request_timer_running:
+            self.image_request_timer_running = True
+            self.last_image_request_time = time.time()
+            logger.info("Таймер периодической отправки изображений запущен.")
+
+    def stop_image_request_timer(self):
+        if self.image_request_timer_running:
+            self.image_request_timer_running = False
+            logger.info("Таймер периодической отправки изображений остановлен.")
+
     def clear_history(self):
         self.model.current_character.clear_history()
         self.chat_window.delete(1.0, tk.END)
@@ -1987,6 +2042,19 @@ class ChatGUI:
             else:
                 logger.info(
                     f"Настройка захвата экрана '{key}' изменена на '{value}'. Поток захвата не активен, изменения будут применены при следующем запуске.")
+        elif key == "SEND_IMAGE_REQUESTS":
+            if bool(value):
+                self.start_image_request_timer()
+            else:
+                self.stop_image_request_timer()
+        elif key == "IMAGE_REQUEST_INTERVAL":
+            if self.image_request_timer_running:
+                logger.info(f"Настройка интервала запросов изображений изменена на '{value}'. Перезапускаю таймер.")
+                self.stop_image_request_timer()
+                self.start_image_request_timer()
+            else:
+                logger.info(
+                    f"Настройка интервала запросов изображений изменена на '{value}'. Таймер не активен, изменения будут применены при следующем запуске.")
         elif key == "RECOGNIZER_TYPE":
             # Останавливаем текущее распознавание
             SpeechRecognition.active = False
