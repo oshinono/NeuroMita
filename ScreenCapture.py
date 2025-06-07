@@ -64,8 +64,8 @@ class ScreenCapture:
 
         self._quality = max(1, min(quality, 100))  # Ограничение качества от 1 до 100
         self._fps = max(1, fps)  # Минимальный FPS = 1
-        self._interval_seconds = 1.0 / self._fps
-        self._interval_seconds = max(0.1, self._interval_seconds)  # Минимальный интервал 0.1 секунды
+        #self._interval_seconds = 1.0 / self._fps
+        self._interval_seconds = max(0.5, interval_seconds)  # Минимальный интервал 0.1 секунды
         self._max_history_frames = max(1, max_history_frames) # Минимум 1 кадр в истории
         self._max_transfer_frames = max(1, max_transfer_frames) # Минимум 1 кадр для передачи
         self._capture_width = max(1, capture_width) # Минимальная ширина 1
