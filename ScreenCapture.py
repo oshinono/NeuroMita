@@ -18,7 +18,9 @@ class ScreenCapture:
         self._interval_seconds = 1.0  # По умолчанию 1 кадр в секунду
         self._sct = None  # Инициализируем здесь как None, чтобы создавать в потоке
         self._pil_checked = False # Флаг, чтобы не проверять установку PIL каждый раз
-
+        self._lock = threading.Lock() # Мьютекс для потокобезопасного доступа к данным
+        self._error_count = 0 # Счетчик ошибок
+        self._max_errors = 5 # Максимальное количество ошибок перед остановкой
     def _ensure_pil_installed(self):
         """Проверяет наличие Pillow и устанавливает при необходимости."""
         if self._pil_checked:
@@ -92,6 +94,10 @@ class ScreenCapture:
         with mss.mss() as sct:
             while self._running:
                 try:
+                    # Сброс счетчика ошибок при успешном захвате
+                    with self._lock:
+                        self._error_count = 0
+
                     # Захват всего экрана
                     sct_img = sct.grab(sct.monitors[0])  # monitors[0] - основной монитор
 
@@ -109,29 +115,38 @@ class ScreenCapture:
                     current_frame_bytes = byte_arr.getvalue()
 
                     # Добавляем кадр в историю, поддерживая лимит
-                    self._frame_history.append(current_frame_bytes)
-                    if len(self._frame_history) > self._max_history_frames:
-                        self._frame_history.pop(0) # Удаляем самый старый кадр
+                    with self._lock:
+                        self._frame_history.append(current_frame_bytes)
+                        if len(self._frame_history) > self._max_history_frames:
+                            self._frame_history.pop(0) # Удаляем самый старый кадр
 
-                    # Обновляем _latest_frame для совместимости, если нужно
-                    self._latest_frame = current_frame_bytes
+                        # Обновляем _latest_frame для совместимости, если нужно
+                        self._latest_frame = current_frame_bytes
 
                 except Exception as e:
-                    logger.error(f"Ошибка при захвате экрана: {e}")
+                    with self._lock:
+                        self._error_count += 1
+                        logger.error(f"Ошибка при захвате экрана (попытка {self._error_count}/{self._max_errors}): {e}")
+                        if self._error_count >= self._max_errors:
+                            logger.critical(f"Достигнуто максимальное количество ошибок ({self._max_errors}). Остановка захвата экрана.")
+                            self._running = False # Остановка потока при множественных ошибках
                     # При ошибке не добавляем кадр, но не сбрасываем историю
 
                 time.sleep(self._interval_seconds)
 
     def get_latest_frame(self) -> bytes | None:
         """Возвращает последний захваченный кадр в формате JPEG байтов (для совместимости)."""
-        if self._frame_history:
-            return self._frame_history[-1]
-        return None
+        with self._lock:
+            if self._frame_history:
+                return self._frame_history[-1]
+            return None
 
     def get_recent_frames(self, limit: int) -> list[bytes]:
         """Возвращает список последних захваченных кадров в формате JPEG байтов."""
-        # Возвращаем не более limit кадров из истории, начиная с самого старого из запрошенных
-        return self._frame_history[max(0, len(self._frame_history) - limit):]
+        with self._lock:
+            # Возвращаем не более limit кадров из истории, начиная с самого старого из запрошенных
+            return self._frame_history[max(0, len(self._frame_history) - limit):]
 
     def is_running(self) -> bool:
-        return self._running
+        with self._lock:
+            return self._running
