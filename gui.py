@@ -1295,6 +1295,11 @@ class ChatGUI:
              'default': 1, 'validation': self.validate_positive_integer,
              'tooltip': _('Максимальное количество последних кадров для отправки в модель (минимум 1).',
                           'Maximum number of recent frames to send to the model (минимум 1).')},
+            {'label': _('Кол-во кадров для передачи', 'Number of frames for transfer'),
+             'key': 'SCREEN_CAPTURE_TRANSFER_LIMIT', 'type': 'entry',
+             'default': 1, 'validation': self.validate_positive_integer,
+             'tooltip': _('Максимальное количество кадров, передаваемых за один запрос (минимум 1).',
+                          'Maximum number of frames transferred per request (minimum 1).')},
             {'label': _('Ширина захвата', 'Capture Width'), 'key': 'SCREEN_CAPTURE_WIDTH', 'type': 'entry',
              'default': 1024, 'validation': self.validate_positive_integer,
              'tooltip': _('Ширина захватываемого изображения в пикселях.', 'Width of the captured image in pixels.')},
@@ -1646,8 +1651,8 @@ class ChatGUI:
                                           lambda: self.model.generate_response(user_input, system_input, image_data)),
                 timeout=25.0  # Тайм-аут в секундах
             )
-            self.insert_message("assistant", response)
-            self.updateAll()
+            self.root.after(0, lambda: self.insert_message("assistant", response))
+            self.root.after(0, self.updateAll)
             if self.server:
                 try:
                     if self.server.client_socket:
@@ -1667,10 +1672,11 @@ class ChatGUI:
             interval = float(self.settings.get("SCREEN_CAPTURE_INTERVAL", 5.0))
             quality = int(self.settings.get("SCREEN_CAPTURE_QUALITY", 25))
             fps = int(self.settings.get("SCREEN_CAPTURE_FPS", 1))
-            max_history_frames = int(self.settings.get("SCREEN_CAPTURE_HISTORY_LIMIT", 1))
+            max_history_frames = int(self.settings.get("SCREEN_CAPTURE_HISTORY_LIMIT", 3))
+            max_frames_per_request = int(self.settings.get("SCREEN_CAPTURE_TRANSFER_LIMIT", 1))
             capture_width = int(self.settings.get("SCREEN_CAPTURE_WIDTH", 1024))
             capture_height = int(self.settings.get("SCREEN_CAPTURE_HEIGHT", 768))
-            self.screen_capture_instance.start_capture(interval, quality, fps, max_history_frames, capture_width,
+            self.screen_capture_instance.start_capture(interval, quality, fps, max_history_frames,max_frames_per_request, capture_width,
                                                        capture_height)
             self.screen_capture_running = True
             logger.info(
@@ -2041,7 +2047,7 @@ class ChatGUI:
             else:
                 self.stop_screen_capture_thread()
         elif key in ["SCREEN_CAPTURE_INTERVAL", "SCREEN_CAPTURE_QUALITY", "SCREEN_CAPTURE_FPS",
-                     "SCREEN_CAPTURE_HISTORY_LIMIT", "SCREEN_CAPTURE_WIDTH", "SCREEN_CAPTURE_HEIGHT"]:
+                     "SCREEN_CAPTURE_HISTORY_LIMIT", "SCREEN_CAPTURE_TRANSFER_LIMIT", "SCREEN_CAPTURE_WIDTH", "SCREEN_CAPTURE_HEIGHT"]:
             # Если поток захвата экрана запущен, перезапускаем его с новыми настройками
             if self.screen_capture_instance and self.screen_capture_instance.is_running():
                 logger.info(f"Настройка захвата экрана '{key}' изменена на '{value}'. Перезапускаю поток захвата.")

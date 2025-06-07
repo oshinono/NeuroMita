@@ -12,6 +12,7 @@ class ScreenCapture:
         self._latest_frame = None # Оставляем для совместимости, но будем использовать _frame_history
         self._frame_history = [] # Список для хранения последних кадров
         self._max_history_frames = 1 # Максимальное количество кадров в истории
+        self._max_transfer_frames = 3 # Максимальное количество кадров для передачи за запрос
         self._quality = 25  # По умолчанию 25%
         self._fps = 1  # По умолчанию 1 кадр в секунду
         self._interval_seconds = 1.0  # По умолчанию 1 кадр в секунду
@@ -48,7 +49,7 @@ class ScreenCapture:
         self._pil_checked = True
 
 
-    def start_capture(self, interval_seconds: float = 1.0, quality: int = 25, fps: int = 1, max_history_frames: int = 1, capture_width: int = 1024, capture_height: int = 768):
+    def start_capture(self, interval_seconds: float = 1.0, quality: int = 25, fps: int = 1, max_history_frames: int = 1, max_transfer_frames: int = 1, capture_width: int = 1024, capture_height: int = 768):
         # --- НАЧАЛО ИЗМЕНЕНИЙ: ДИНАМИЧЕСКАЯ ПОДГРУЗКА ПАКЕТА ---
         try:
             self._ensure_pil_installed()
@@ -66,6 +67,7 @@ class ScreenCapture:
         self._interval_seconds = 1.0 / self._fps
         self._interval_seconds = max(0.1, self._interval_seconds)  # Минимальный интервал 0.1 секунды
         self._max_history_frames = max(1, max_history_frames) # Минимум 1 кадр в истории
+        self._max_transfer_frames = max(1, max_transfer_frames) # Минимум 1 кадр для передачи
         self._capture_width = max(1, capture_width) # Минимальная ширина 1
         self._capture_height = max(1, capture_height) # Минимальная высота 1
 
@@ -98,7 +100,10 @@ class ScreenCapture:
                         self._error_count = 0
 
                     # Захват всего экрана
-                    sct_img = sct.grab(sct.monitors[0])  # monitors[0] - основной монитор
+                    try:
+                        sct_img = sct.grab(sct.monitors[0])  # monitors[0] - основной монитор
+                    except Exception as e:
+                        logger.error(e)
 
                     # Конвертация в PIL Image
                     img = Image.frombytes("RGB", sct_img.size, sct_img.rgb)
@@ -125,7 +130,7 @@ class ScreenCapture:
                 except Exception as e:
                     with self._lock:
                         self._error_count += 1
-                        logger.error(f"Ошибка при захвате экрана (попытка {self._error_count}/{self._max_errors}): {e}")
+                        logger.error(f"Ошибка при захвате экрана (попытка {self._error_count}/{self._max_errors}): {e}", exc_info=True) # Добавил exc_info=True для полного стектрейса
                         if self._error_count >= self._max_errors:
                             logger.critical(f"Достигнуто максимальное количество ошибок ({self._max_errors}). Остановка захвата экрана.")
                             self._running = False # Остановка потока при множественных ошибках
@@ -143,8 +148,10 @@ class ScreenCapture:
     def get_recent_frames(self, limit: int) -> list[bytes]:
         """Возвращает список последних захваченных кадров в формате JPEG байтов."""
         with self._lock:
-            # Возвращаем не более limit кадров из истории, начиная с самого старого из запрошенных
-            return self._frame_history[max(0, len(self._frame_history) - limit):]
+            # Ограничиваем запрошенный лимит максимальным лимитом передачи
+            actual_limit = min(limit, self._max_transfer_frames)
+            # Возвращаем не более actual_limit кадров из истории, начиная с самого старого из запрошенных
+            return self._frame_history[max(0, len(self._frame_history) - actual_limit):]
 
     def is_running(self) -> bool:
         with self._lock:
