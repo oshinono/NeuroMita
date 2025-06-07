@@ -443,10 +443,11 @@ class ChatGUI:
                 self.instant_send = True
             else:
                 self.send_message()
+            
+            self.last_image_request_time = time.time() # Сброс таймера захвата экрана при мгновенной отправке
 
             SpeechRecognition._text_buffer.clear()
             SpeechRecognition._current_text = ""
-
         except Exception as e:
             logger.info(f"Ошибка обработки текста: {str(e)}")
 
@@ -1674,6 +1675,9 @@ class ChatGUI:
             self.screen_capture_running = True
             logger.info(
                 f"Поток захвата экрана запущен с интервалом {interval}, качеством {quality}, {fps} FPS, историей {max_history_frames} кадров, разрешением {capture_width}x{capture_height}.")
+
+            if self.settings.get("SEND_IMAGE_REQUESTS", 1):
+                self.start_image_request_timer()
 
     def stop_screen_capture_thread(self):
         if self.screen_capture_running:
