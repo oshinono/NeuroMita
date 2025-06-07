@@ -381,23 +381,28 @@ class ChatGUI:
                 logger.error("Ошибка: Цикл событий не готов.")
 
         # --- Логика периодической отправки изображений ---
-        if self.settings.get("SEND_IMAGE_REQUESTS", False):
+        if self.image_request_timer_running:
             current_time = time.time()
             interval = float(self.settings.get("IMAGE_REQUEST_INTERVAL", 20.0))
-            if current_time - self.last_image_request_time >= interval:
+
+            delta = current_time - self.last_image_request_time
+            # Добавляем лог для отладки
+            #logger.debug(f"Проверка периодической отправки: {delta}/{interval}")
+
+            if  delta >= interval:
 
                 # Захватываем изображение
                 image_data = []
                 if self.settings.get("ENABLE_SCREEN_ANALYSIS", False):
                     logger.info(
-                        f"Отправка периодического запроса с изображением ({current_time - self.last_image_request_time}/{interval} сек).")
+                        f"Отправка периодического запроса с изображением ({current_time - self.last_image_request_time:.2f}/{interval:.2f} сек).")
                     history_limit = int(self.settings.get("SCREEN_CAPTURE_HISTORY_LIMIT", 1))
                     frames = self.screen_capture_instance.get_recent_frames(history_limit)
                     if frames:
                         image_data.extend(frames)
                         logger.info(f"Захвачено {len(frames)} кадров для периодической отправки.")
                     else:
-                        ...#logger.info("Анализ экрана включен, но кадры не готовы или история пуста для периодической отправки.")
+                        logger.info("Анализ экрана включен, но кадры не готовы или история пуста для периодической отправки.")
 
                     if image_data:
                         # Отправляем запрос только с изображением (без текста)
@@ -407,7 +412,7 @@ class ChatGUI:
                         else:
                             logger.error("Ошибка: Цикл событий не готов для периодической отправки изображений.")
                     else:
-                        ...#logger.warning("Нет изображений для периодической отправки.")
+                        logger.warning("Нет изображений для периодической отправки.")
 
 
         # --- Остальная часть функции без изменений (обработка микрофона) ---
@@ -444,7 +449,7 @@ class ChatGUI:
             else:
                 self.send_message()
             
-            self.last_image_request_time = time.time() # Сброс таймера захвата экрана при мгновенной отправке
+
 
             SpeechRecognition._text_buffer.clear()
             SpeechRecognition._current_text = ""
@@ -1634,6 +1639,8 @@ class ChatGUI:
             #logger.info("Нет текста или изображений для отправки.")
             return
 
+        self.last_image_request_time = time.time()  # Сброс таймера захвата экрана при мгновенной отправке
+
         if user_input:  # Вставляем сообщение в чат только если есть пользовательский текст
             self.insert_message("user", user_input)
             self.user_entry.delete("1.0", "end")
@@ -1694,7 +1701,9 @@ class ChatGUI:
     def start_image_request_timer(self):
         if not self.image_request_timer_running:
             self.image_request_timer_running = True
-            self.last_image_request_time = time.time()
+            # Устанавливаем время последнего запроса так, чтобы следующий запрос произошел немедленно
+           # interval = float(self.settings.get("IMAGE_REQUEST_INTERVAL", 20.0))
+            self.last_image_request_time = time.time()# - interval
             logger.info("Таймер периодической отправки изображений запущен.")
 
     def stop_image_request_timer(self):

@@ -87,54 +87,63 @@ class ScreenCapture:
         logger.info("Захват экрана остановлен.")
 
     def _capture_loop(self):
-        # Импортируем Image здесь, так как на этапе start_capture мы убедились в её наличии
-        from PIL import Image
+        from PIL import Image  # Импортируем Image здесь
+        from io import BytesIO  # Импортируем BytesIO здесь
 
-        # Инициализируем mss.mss() внутри потока, где он будет использоваться
-        # Это решает проблему 'srcdc' object has no attribute
+        # Инициализируем mss.mss() внутри потока
         with mss.mss() as sct:
             while self._running:
                 try:
-                    # Сброс счетчика ошибок при успешном захвате
-                    with self._lock:
+                    with self._lock:  # Блокировка для сброса счетчика ошибок
                         self._error_count = 0
 
-                    # Захват всего экрана
-                    try:
-                        sct_img = sct.grab(sct.monitors[0])  # monitors[0] - основной монитор
-                    except Exception as e:
-                        logger.error(e)
+                    # --- Определение монитора для захвата ---
+                    if not sct.monitors:
+                        logger.error("mss: Мониторы не найдены. Пропуск захвата.")
+                        time.sleep(self._interval_seconds * 2)  # Ожидание
+                        continue
 
-                    # Конвертация в PIL Image
-                    img = Image.frombytes("RGB", sct_img.size, sct_img.rgb)
+                    # sct.monitors[0] - это bounding box всех мониторов.
+                    # sct.monitors[1] - это основной (primary) монитор.
+                    # Если нужен именно основной монитор:
+                    if len(sct.monitors) > 1:
+                        monitor_to_capture = sct.monitors[1]
+                    else:
+                        # Если sct.monitors содержит только один элемент, это sct.monitors[0] (все экраны).
+                        # Используем его, если основного нет (например, система с одним монитором, где mss не создает отдельный sct.monitors[1])
+                        # или если такова была исходная задумка (захватить всё, если основной не выделен).
+                        monitor_to_capture = sct.monitors[0]
+                        logger.debug(
+                            f"mss: Захватывается sct.monitors[0], т.к. len(sct.monitors) <= 1. Детали: {monitor_to_capture}")
+                    # -----------------------------------------
 
-                    # Сжатие изображения (уменьшение размера) до заданного разрешения
+                    sct_img = sct.grab(monitor_to_capture)
+
+                    img = Image.frombytes("RGB", (sct_img.width, sct_img.height),
+                                          sct_img.rgb)  # Используем sct_img.width, sct_img.height
+
                     max_size = (self._capture_width, self._capture_height)
-                    img.thumbnail(max_size, Image.Resampling.LANCZOS)  # Использование LANCZOS для лучшего качества
+                    img.thumbnail(max_size, Image.Resampling.LANCZOS)
 
-                    # Сохраняем в байтовый буфер в формате JPEG для лучшего сжатия
-                    from io import BytesIO
                     byte_arr = BytesIO()
-                    img.save(byte_arr, format='JPEG', quality=self._quality)  # Качество JPEG
+                    img.save(byte_arr, format='JPEG', quality=self._quality)
                     current_frame_bytes = byte_arr.getvalue()
 
-                    # Добавляем кадр в историю, поддерживая лимит
-                    with self._lock:
+                    with self._lock:  # Блокировка для обновления истории кадров
                         self._frame_history.append(current_frame_bytes)
                         if len(self._frame_history) > self._max_history_frames:
-                            self._frame_history.pop(0) # Удаляем самый старый кадр
-
-                        # Обновляем _latest_frame для совместимости, если нужно
+                            self._frame_history.pop(0)
                         self._latest_frame = current_frame_bytes
 
                 except Exception as e:
-                    with self._lock:
+                    with self._lock:  # Блокировка для обновления счетчика ошибок
                         self._error_count += 1
-                        logger.error(f"Ошибка при захвате экрана (попытка {self._error_count}/{self._max_errors}): {e}", exc_info=True) # Добавил exc_info=True для полного стектрейса
+                        logger.error(f"Ошибка при захвате экрана (попытка {self._error_count}/{self._max_errors}): {e}",
+                                     exc_info=True)
                         if self._error_count >= self._max_errors:
-                            logger.critical(f"Достигнуто максимальное количество ошибок ({self._max_errors}). Остановка захвата экрана.")
-                            self._running = False # Остановка потока при множественных ошибках
-                    # При ошибке не добавляем кадр, но не сбрасываем историю
+                            logger.critical(
+                                f"Достигнуто максимальное количество ошибок ({self._max_errors}). Остановка захвата экрана.")
+                            self._running = False
 
                 time.sleep(self._interval_seconds)
 
