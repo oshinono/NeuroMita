@@ -1800,12 +1800,11 @@ class ChatGUI:
                 'label': _("Тип распознавания", "Recognition Type"),
                 'type': 'combobox',
                 'key': 'RECOGNIZER_TYPE',
-                # TODO Вернуть воск 'options': ["google", "vosk"],
                 'options': ["google","vosk","gigaam"],
                 'default': "google",
                 'command': lambda value: SpeechRecognition.set_recognizer_type(value),
-                'tooltip': _("Выберите движок распознавания речи: Google или Vosk.",
-                             "Select speech recognition engine: Google or Vosk."),
+                'tooltip': _("Выберите движок распознавания речи",
+                             "Select speech recognition engine"),
                 #'command': self.update_vosk_model_visibility
             },
             # {
