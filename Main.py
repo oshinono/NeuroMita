@@ -201,6 +201,7 @@ ensure_project_root()
 
 import threading
 
+import onnxruntime
 
 def main():
 
