@@ -11,6 +11,7 @@ from io import BytesIO
 # Используем стандартный логгер
 from Logger import logger
 
+#os.environ['TORCH_FORCE_WEIGHTS_ONLY_LOAD'] = '1'
 
 class AudioState:
     """Простой класс для хранения состояния аудио, не требует внешних библиотек."""
@@ -66,6 +67,7 @@ class SpeechRecognition:
     _vosk_KaldiRecognizer = None
     _vosk_SetLogLevel = None
     _silero_vad_loader = None
+    _omegaconf = None
     _gigaam = None  # Для модуля gigaam
 
     # --- Переменные для хранения инициализированных объектов ---
@@ -109,6 +111,23 @@ class SpeechRecognition:
                 # Общие зависимости для VAD
                 if SpeechRecognition._torch is None:
                     import torch
+                    import omegaconf
+                    import typing
+                    import collections
+                    torch.serialization.add_safe_globals([omegaconf.dictconfig.DictConfig])
+                    torch.serialization.add_safe_globals([omegaconf.base.ContainerMetadata])
+                    torch.serialization.add_safe_globals([typing.Any])
+                    torch.serialization.add_safe_globals([dict])
+                    torch.serialization.add_safe_globals([collections.defaultdict])
+                    torch.serialization.add_safe_globals([omegaconf.nodes.AnyNode])
+                    torch.serialization.add_safe_globals([omegaconf.nodes.Metadata])
+                    torch.serialization.add_safe_globals([omegaconf.listconfig.ListConfig])
+                    torch.serialization.add_safe_globals([list])
+                    torch.serialization.add_safe_globals([int])
+                    # torch.serialization.safe_globals([omegaconf.dictconfig.DictConfig])
+                    # torch.serialization.safe_globals([omegaconf.base.ContainerMetadata])
+                    # torch.serialization.safe_globals([[typing.Any]])
+                    logger.warning("TORCH ADDED SAFE GLOBALS!")
                     SpeechRecognition._torch = torch
                 if SpeechRecognition._sd is None:
                     import sounddevice as sd
@@ -269,31 +288,59 @@ class SpeechRecognition:
         if model is None:
             logger.error("Распознаватель GigaAM не инициализирован.")
             return
+
+        np = SpeechRecognition._np
+        TEMP_AUDIO_DIR = "TempAudios"
+        os.makedirs(TEMP_AUDIO_DIR, exist_ok=True)
+        temp_filepath = os.path.join(TEMP_AUDIO_DIR, f"temp_gigaam_{time.time_ns()}.wav")
         
+        recognized_successfully = False
         try:
-            transcriptions = model.transcribe(audio_data, sample_rate_hz=SpeechRecognition.VOSK_SAMPLE_RATE)
-            if transcriptions and 'text' in transcriptions[0] and transcriptions[0]['text']:
-                recognized_text = transcriptions[0]['text']
+            audio_data_int16 = (audio_data * 32767).astype(np.int16)
+            with wave.open(temp_filepath, 'wb') as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2)
+                wf.setframerate(SpeechRecognition.VOSK_SAMPLE_RATE)
+                wf.writeframes(audio_data_int16.tobytes())
+
+            transcription = model.transcribe(temp_filepath)
+            if transcription and transcription.strip() != '':
+                recognized_text = transcription  
                 logger.info(f"GigaAM распознал: {recognized_text}")
                 await SpeechRecognition.handle_voice_message(recognized_text)
+                recognized_successfully = True
             else:
-                logger.info("GigaAM не распознал текст. Сохранение аудиофрагмента...")
-                try:
-                    np = SpeechRecognition._np
-                    os.makedirs(SpeechRecognition.FAILED_AUDIO_DIR, exist_ok=True)
-                    timestamp = int(time.time())
-                    filename = os.path.join(SpeechRecognition.FAILED_AUDIO_DIR, f"failed_{timestamp}.wav")
-                    audio_data_int16 = (audio_data * 32767).astype(np.int16)
-                    with wave.open(filename, 'wb') as wf:
-                        wf.setnchannels(1)
-                        wf.setsampwidth(2)
-                        wf.setframerate(SpeechRecognition.VOSK_SAMPLE_RATE)
-                        wf.writeframes(audio_data_int16.tobytes())
-                    logger.info(f"Фрагмент сохранен в: {filename}")
-                except Exception as e:
-                    logger.error(f"Не удалось сохранить аудиофрагмент: {e}")
+                logger.info("GigaAM не распознал текст.")
+
         except Exception as e:
             logger.error(f"Ошибка во время распознавания GigaAM: {e}")
+
+        finally:
+            if os.path.exists(temp_filepath):
+                try:
+                    os.remove(temp_filepath)
+                except OSError as e:
+                    logger.error(f"Не удалось удалить временный файл {temp_filepath}: {e}")
+
+        if not recognized_successfully:
+            logger.info("Сохранение аудиофрагмента в папку Failed...")
+            try:
+                os.makedirs(SpeechRecognition.FAILED_AUDIO_DIR, exist_ok=True)
+                timestamp = int(time.time())
+                filename = os.path.join(SpeechRecognition.FAILED_AUDIO_DIR, f"failed_{timestamp}.wav")
+                
+                # Используем уже сконвертированные данные, если они есть, или конвертируем заново
+                if 'audio_data_int16' not in locals():
+                    audio_data_int16 = (audio_data * 32767).astype(np.int16)
+
+                with wave.open(filename, 'wb') as wf:
+                    wf.setnchannels(1)
+                    wf.setsampwidth(2)
+                    wf.setframerate(SpeechRecognition.VOSK_SAMPLE_RATE)
+                    wf.writeframes(audio_data_int16.tobytes())
+                logger.info(f"Фрагмент сохранен в: {filename}")
+            except Exception as e:
+                logger.error(f"Не удалось сохранить аудиофрагмент: {e}")
 
     @staticmethod
     async def _process_audio_task(audio_data: "np.ndarray"):
