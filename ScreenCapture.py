@@ -1,6 +1,5 @@
 import mss
 import mss.tools
-# from PIL import Image  <- УДАЛЕНО ОТСЮДА
 import numpy as np
 import time
 import threading

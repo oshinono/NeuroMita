@@ -230,6 +230,11 @@ class ChatGUI:
         self.last_image_request_time = time.time()
         self.image_request_timer_running = False
 
+        # Добавляем автоматический запуск захвата экрана, если настройка включена
+        if self.settings.get("ENABLE_SCREEN_ANALYSIS", False):
+            logger.info("Настройка 'ENABLE_SCREEN_ANALYSIS' включена. Автоматический запуск захвата экрана.")
+            self.start_screen_capture_thread()
+
     def start_asyncio_loop(self):
         """Запускает цикл событий asyncio в отдельном потоке."""
         try:
